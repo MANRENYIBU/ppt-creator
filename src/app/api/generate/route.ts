@@ -1,15 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { GenerateRequest, GenerationRecord, OutlineItem, DURATION_TO_SLIDES } from '@/types';
+import { GenerateRequest, GenerationRecord, DURATION_TO_SLIDES } from '@/types';
+import { generatePresentation } from '@/lib/generator';
+import { validateConfig } from '@/lib/config';
 
 export async function POST(request: NextRequest) {
   try {
+    // 验证配置
+    const config = validateConfig();
+    if (!config.ai) {
+      return NextResponse.json(
+        { error: 'AI service not configured. Please set API_KEY in environment variables.' },
+        { status: 500 }
+      );
+    }
+
     const body: GenerateRequest = await request.json();
     const { topic, language, duration } = body;
 
+    // 参数验证
     if (!topic || !language || !duration) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
+        { error: 'Missing required fields: topic, language, duration' },
+        { status: 400 }
+      );
+    }
+
+    if (topic.length > 200) {
+      return NextResponse.json(
+        { error: 'Topic too long, max 200 characters' },
+        { status: 400 }
+      );
+    }
+
+    if (!['zh-CN', 'en-US'].includes(language)) {
+      return NextResponse.json(
+        { error: 'Invalid language, must be zh-CN or en-US' },
         { status: 400 }
       );
     }
@@ -17,19 +43,17 @@ export async function POST(request: NextRequest) {
     const slideCount = DURATION_TO_SLIDES[duration];
     if (!slideCount) {
       return NextResponse.json(
-        { error: 'Invalid duration' },
+        { error: 'Invalid duration, must be 5, 10, 15, 20, or 30' },
         { status: 400 }
       );
     }
 
-    // TODO: 实现真实的AI生成逻辑
-    // 1. 调用搜索API收集资料
-    // 2. 调用AI生成大纲
-    // 3. 调用AI生成每页内容
-    // 4. 使用PptxGenJS生成PPTX文件
-
-    // 模拟生成的大纲
-    const outline: OutlineItem[] = generateMockOutline(topic, language, slideCount.min);
+    // 生成PPT
+    const { outline, downloadUrl } = await generatePresentation(
+      topic,
+      language,
+      duration
+    );
 
     const record: GenerationRecord = {
       id: uuidv4(),
@@ -38,58 +62,16 @@ export async function POST(request: NextRequest) {
       duration,
       outline,
       createdAt: new Date().toISOString(),
-      // downloadUrl 需要在真实实现中生成PPTX后提供
+      downloadUrl,
     };
 
     return NextResponse.json(record);
   } catch (error) {
     console.error('Generation error:', error);
+    const message = error instanceof Error ? error.message : 'Internal server error';
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: message },
       { status: 500 }
     );
   }
-}
-
-function generateMockOutline(
-  topic: string,
-  language: 'zh-CN' | 'en-US',
-  pageCount: number
-): OutlineItem[] {
-  const isZh = language === 'zh-CN';
-
-  const outline: OutlineItem[] = [
-    {
-      title: isZh ? `封面 - ${topic}` : `Cover - ${topic}`,
-      points: [],
-    },
-    {
-      title: isZh ? '目录' : 'Table of Contents',
-      points: [],
-    },
-  ];
-
-  const contentPages = pageCount - 4; // 减去封面、目录、总结、致谢
-  for (let i = 0; i < contentPages; i++) {
-    outline.push({
-      title: isZh ? `第${i + 1}部分` : `Part ${i + 1}`,
-      points: [
-        isZh ? '要点一' : 'Key point 1',
-        isZh ? '要点二' : 'Key point 2',
-        isZh ? '要点三' : 'Key point 3',
-      ],
-    });
-  }
-
-  outline.push({
-    title: isZh ? '总结' : 'Summary',
-    points: [],
-  });
-
-  outline.push({
-    title: isZh ? '感谢' : 'Thank You',
-    points: [],
-  });
-
-  return outline;
 }
