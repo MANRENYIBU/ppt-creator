@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback, useState, Suspense } from 'react';
+import { useEffect, useCallback, useState, Suspense, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   CheckCircle2,
@@ -19,7 +19,7 @@ import { Header } from '@/components/header';
 import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { useGenerationStore } from '@/store/generation';
-import { GenerationStage, GenerationSession, GenerationRecord } from '@/types';
+import { GenerationStage, GenerationSession } from '@/types';
 
 interface StageConfig {
   key: GenerationStage;
@@ -39,7 +39,7 @@ const STAGES: StageConfig[] = [
 function GenerateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { completeGeneration } = useGenerationStore();
+  const { addSessionId } = useGenerationStore();
 
   // URL参数
   const topic = searchParams.get('topic') || '';
@@ -53,6 +53,7 @@ function GenerateContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentStageIndex, setCurrentStageIndex] = useState(-1);
+  const hasInitialized = useRef(false);
 
   // 计算进度
   const getProgress = useCallback(() => {
@@ -83,6 +84,9 @@ function GenerateContent() {
       const newSession: GenerationSession = await response.json();
       setSession(newSession);
 
+      // 保存会话ID到本地
+      addSessionId(newSession.id);
+
       // 更新URL添加session ID
       const url = new URL(window.location.href);
       url.searchParams.set('session', newSession.id);
@@ -96,7 +100,7 @@ function GenerateContent() {
     } finally {
       setLoading(false);
     }
-  }, [topic, language, duration, router]);
+  }, [topic, language, duration, router, addSessionId]);
 
   // 获取会话状态
   const fetchSession = useCallback(async (id: string) => {
@@ -143,18 +147,9 @@ function GenerateContent() {
       const updatedSession: GenerationSession = await response.json();
       setSession(updatedSession);
 
-      // 如果完成，跳转到结果页
+      // 如果完成，保存会话ID并跳转到结果页
       if (updatedSession.stage === 'completed') {
-        const record: GenerationRecord = {
-          id: updatedSession.id,
-          topic: updatedSession.topic,
-          language: updatedSession.language,
-          duration: updatedSession.duration,
-          outline: updatedSession.outline || [],
-          createdAt: updatedSession.createdAt,
-          downloadUrl: updatedSession.downloadUrl,
-        };
-        completeGeneration(record);
+        addSessionId(updatedSession.id);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -163,7 +158,7 @@ function GenerateContent() {
       setLoading(false);
       setCurrentStageIndex(-1);
     }
-  }, [session, completeGeneration]);
+  }, [session, addSessionId]);
 
   // 自动执行所有阶段
   const executeAll = useCallback(async () => {
@@ -177,8 +172,8 @@ function GenerateContent() {
       const shouldSkip =
         (stage.key === 'collecting' && currentSession.resources) ||
         (stage.key === 'outlining' && currentSession.outline?.length) ||
-        (stage.key === 'generating' && currentSession.slides?.length) ||
-        (stage.key === 'exporting' && currentSession.downloadUrl);
+        (stage.key === 'generating' && currentSession.dslPresentation?.slides?.length) ||
+        (stage.key === 'exporting' && currentSession.stage === 'completed');
 
       if (shouldSkip) continue;
 
@@ -199,16 +194,7 @@ function GenerateContent() {
         setSession(currentSession);
 
         if (currentSession && currentSession.stage === 'completed') {
-          const record: GenerationRecord = {
-            id: currentSession.id,
-            topic: currentSession.topic,
-            language: currentSession.language,
-            duration: currentSession.duration,
-            outline: currentSession.outline || [],
-            createdAt: currentSession.createdAt,
-            downloadUrl: currentSession.downloadUrl,
-          };
-          completeGeneration(record);
+          addSessionId(currentSession.id);
           break;
         }
       } catch (err) {
@@ -220,7 +206,7 @@ function GenerateContent() {
 
     setLoading(false);
     setCurrentStageIndex(-1);
-  }, [session, completeGeneration]);
+  }, [session, addSessionId]);
 
   // 初始化
   useEffect(() => {
@@ -229,16 +215,21 @@ function GenerateContent() {
       return;
     }
 
+    // 防止重复初始化
+    if (hasInitialized.current) return;
+    hasInitialized.current = true;
+
     if (sessionId) {
       fetchSession(sessionId);
     } else {
       createSession();
     }
-  }, [topic, sessionId, router, fetchSession, createSession]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topic, sessionId]);
 
   // 跳转到结果页
   useEffect(() => {
-    if (session?.stage === 'completed' && session.downloadUrl) {
+    if (session?.stage === 'completed') {
       router.replace(`/result?id=${session.id}`);
     }
   }, [session, router]);
@@ -253,8 +244,8 @@ function GenerateContent() {
     const isCompleted =
       (stage.key === 'collecting' && session.resources) ||
       (stage.key === 'outlining' && session.outline?.length) ||
-      (stage.key === 'generating' && session.slides?.length) ||
-      (stage.key === 'exporting' && session.downloadUrl);
+      (stage.key === 'generating' && session.dslPresentation?.slides?.length) ||
+      (stage.key === 'exporting' && session.stage === 'completed');
 
     if (isCompleted) return 'completed';
     if (currentStageIndex === stageIndex && loading) return 'loading';
@@ -275,7 +266,7 @@ function GenerateContent() {
       if (collectStatus !== 'completed' && collectStatus !== 'pending') return false;
     }
     if (stage.key === 'generating' && (!session.outline || session.outline.length === 0)) return false;
-    if (stage.key === 'exporting' && (!session.slides || session.slides.length === 0)) return false;
+    if (stage.key === 'exporting' && !session.dslPresentation?.slides?.length) return false;
 
     return true;
   };

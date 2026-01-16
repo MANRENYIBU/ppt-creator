@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, updateSession, updateSessionStage } from '@/lib/session';
-import { generateSlideContents } from '@/lib/generator';
+import { generateDSLPresentation } from '@/lib/dsl-generator';
 
 export async function POST(
   _request: NextRequest,
@@ -25,8 +25,8 @@ export async function POST(
       );
     }
 
-    // 如果已经有内容，直接返回
-    if (session.slides && session.slides.length > 0) {
+    // 如果已经有DSL内容，直接返回
+    if (session.dslPresentation && session.dslPresentation.slides.length > 0) {
       return NextResponse.json(session);
     }
 
@@ -34,18 +34,19 @@ export async function POST(
     await updateSessionStage(id, 'generating');
 
     try {
-      // 生成详细内容
-      const slides = await generateSlideContents(
+      // 使用DSL生成器生成内容
+      const dslPresentation = await generateDSLPresentation(
         session.topic,
         session.outline,
         session.language,
-        session.resources || null
+        session.resources || null,
+        session.duration
       );
 
-      // 保存内容
+      // 保存DSL内容
       const updated = await updateSession(id, {
-        slides,
-        stage: 'generating', // 保持在generating阶段，等待用户确认
+        dslPresentation,
+        stage: 'generating',
       });
 
       return NextResponse.json(updated);

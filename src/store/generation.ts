@@ -1,65 +1,52 @@
-import { create } from 'zustand';
-import { GenerationRecord, GenerationProgress, GenerationStage } from '@/types';
+import { create } from 'zustand'
+import { GenerationSession, GenerationProgress } from '@/types'
 
-const STORAGE_KEY = 'ppt-creator-history';
+const STORAGE_KEY = 'ppt-creator-session-ids'
 
 interface GenerationState {
   // 当前生成状态
-  isGenerating: boolean;
-  currentProgress: GenerationProgress | null;
-  currentRecord: GenerationRecord | null;
+  isGenerating: boolean
+  currentProgress: GenerationProgress | null
+  currentSessionId: string | null
 
-  // 历史记录
-  history: GenerationRecord[];
+  // 会话ID列表（只存储ID，数据从服务器获取）
+  sessionIds: string[]
+
+  // 会话缓存（内存中）
+  sessionCache: Map<string, GenerationSession>
 
   // Actions
-  startGeneration: (topic: string, language: 'zh-CN' | 'en-US', duration: number) => void;
-  updateProgress: (progress: GenerationProgress) => void;
-  completeGeneration: (record: GenerationRecord) => void;
-  setError: (message: string) => void;
-  reset: () => void;
+  updateProgress: (progress: GenerationProgress) => void
+  setCurrentSession: (sessionId: string) => void
+  setError: (message: string) => void
+  reset: () => void
 
-  // 历史记录操作
-  loadHistory: () => void;
-  addToHistory: (record: GenerationRecord) => void;
-  removeFromHistory: (id: string) => void;
-  clearHistory: () => void;
+  // 会话ID操作
+  loadSessionIds: () => void
+  addSessionId: (id: string) => void
+  removeSessionId: (id: string) => void
+  clearSessionIds: () => void
+
+  // 会话数据操作
+  fetchSession: (id: string) => Promise<GenerationSession | null>
+  fetchAllSessions: () => Promise<GenerationSession[]>
+  cacheSession: (session: GenerationSession) => void
+  getCachedSession: (id: string) => GenerationSession | undefined
 }
 
 export const useGenerationStore = create<GenerationState>((set, get) => ({
   isGenerating: false,
   currentProgress: null,
-  currentRecord: null,
-  history: [],
-
-  startGeneration: (topic, language, duration) => {
-    set({
-      isGenerating: true,
-      currentProgress: {
-        stage: 'collecting',
-        progress: 0,
-        message: language === 'zh-CN' ? '正在收集资料...' : 'Collecting resources...',
-      },
-      currentRecord: null,
-    });
-  },
+  currentSessionId: null,
+  sessionIds: [],
+  sessionCache: new Map(),
 
   updateProgress: (progress) => {
-    set({ currentProgress: progress });
+    set({ currentProgress: progress })
   },
 
-  completeGeneration: (record) => {
-    const { addToHistory } = get();
-    addToHistory(record);
-    set({
-      isGenerating: false,
-      currentProgress: {
-        stage: 'completed',
-        progress: 100,
-        message: record.language === 'zh-CN' ? '生成完成！' : 'Generation completed!',
-      },
-      currentRecord: record,
-    });
+  setCurrentSession: (sessionId) => {
+    set({ currentSessionId: sessionId })
   },
 
   setError: (message) => {
@@ -70,51 +57,107 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
         progress: 0,
         message,
       },
-    });
+    })
   },
 
   reset: () => {
     set({
       isGenerating: false,
       currentProgress: null,
-      currentRecord: null,
-    });
+      currentSessionId: null,
+    })
   },
 
-  loadHistory: () => {
-    if (typeof window === 'undefined') return;
+  loadSessionIds: () => {
+    if (typeof window === 'undefined') return
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
-        set({ history: JSON.parse(stored) });
+        set({ sessionIds: JSON.parse(stored) })
       }
     } catch (error) {
-      console.error('Failed to load history:', error);
+      console.error('Failed to load session IDs:', error)
     }
   },
 
-  addToHistory: (record) => {
-    const { history } = get();
-    const newHistory = [record, ...history];
-    set({ history: newHistory });
+  addSessionId: (id) => {
+    const { sessionIds } = get()
+    if (sessionIds.includes(id)) return
+    const newIds = [id, ...sessionIds]
+    set({ sessionIds: newIds })
     if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newIds))
     }
   },
 
-  removeFromHistory: (id) => {
-    const { history } = get();
-    const newHistory = history.filter((r) => r.id !== id);
-    set({ history: newHistory });
+  removeSessionId: (id) => {
+    const { sessionIds, sessionCache } = get()
+    const newIds = sessionIds.filter((sid) => sid !== id)
+    sessionCache.delete(id)
+    set({ sessionIds: newIds, sessionCache: new Map(sessionCache) })
     if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newHistory));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newIds))
     }
   },
 
-  clearHistory: () => {
-    set({ history: [] });
+  clearSessionIds: () => {
+    set({ sessionIds: [], sessionCache: new Map() })
     if (typeof window !== 'undefined') {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(STORAGE_KEY)
     }
   },
-}));
+
+  fetchSession: async (id) => {
+    // 先检查缓存
+    const { sessionCache, cacheSession } = get()
+    const cached = sessionCache.get(id)
+    if (cached) return cached
+
+    try {
+      const response = await fetch(`/api/session/${id}`)
+      if (!response.ok) {
+        if (response.status === 404) {
+          // 会话不存在，从ID列表中移除
+          get().removeSessionId(id)
+          return null
+        }
+        throw new Error('Failed to fetch session')
+      }
+      const session: GenerationSession = await response.json()
+      cacheSession(session)
+      return session
+    } catch (error) {
+      console.error('Failed to fetch session:', error)
+      return null
+    }
+  },
+
+  fetchAllSessions: async () => {
+    const { sessionIds, fetchSession } = get()
+    const sessions: GenerationSession[] = []
+
+    // 并行获取所有会话，过滤掉不存在的
+    const results = await Promise.all(
+      sessionIds.map((id) => fetchSession(id))
+    )
+
+    for (const session of results) {
+      if (session) {
+        sessions.push(session)
+      }
+    }
+
+    return sessions
+  },
+
+  cacheSession: (session) => {
+    const { sessionCache } = get()
+    sessionCache.set(session.id, session)
+    set({ sessionCache: new Map(sessionCache) })
+  },
+
+  getCachedSession: (id) => {
+    const { sessionCache } = get()
+    return sessionCache.get(id)
+  },
+}))

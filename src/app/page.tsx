@@ -14,11 +14,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DURATION_OPTIONS } from '@/types';
-import { useGenerationStore } from '@/store/generation';
 
 export default function HomePage() {
   const router = useRouter();
-  const { startGeneration } = useGenerationStore();
 
   const [topic, setTopic] = useState('');
   const [language, setLanguage] = useState<'zh-CN' | 'en-US'>('zh-CN');
@@ -27,8 +25,6 @@ export default function HomePage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim()) return;
-
-    startGeneration(topic.trim(), language, duration);
 
     const params = new URLSearchParams({
       topic: topic.trim(),

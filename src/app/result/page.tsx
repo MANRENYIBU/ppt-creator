@@ -1,52 +1,95 @@
-'use client';
+'use client'
 
-import { useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { CheckCircle2, Download, Plus, History, Loader2, FileText } from 'lucide-react';
-import { Header } from '@/components/header';
-import { Button } from '@/components/ui/button';
-import { useGenerationStore } from '@/store/generation';
+import { useEffect, useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
+import {
+  CheckCircle2,
+  Download,
+  Plus,
+  History,
+  Loader2,
+  FileText,
+} from 'lucide-react'
+import { Header } from '@/components/header'
+import { Button } from '@/components/ui/button'
+import { useGenerationStore } from '@/store/generation'
+import { GenerationSession } from '@/types'
 
 function ResultContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { currentRecord, history, loadHistory } = useGenerationStore();
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { fetchSession, addSessionId } = useGenerationStore()
 
-  const recordId = searchParams.get('id');
-
-  useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
-
-  const record = currentRecord?.id === recordId
-    ? currentRecord
-    : history.find((r) => r.id === recordId);
+  const sessionId = searchParams.get('id')
+  const [session, setSession] = useState<GenerationSession | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
-    if (!recordId || (!record && history.length > 0)) {
-      router.replace('/');
+    const loadSession = async () => {
+      if (!sessionId) {
+        router.replace('/')
+        return
+      }
+
+      setLoading(true)
+      const fetchedSession = await fetchSession(sessionId)
+
+      if (!fetchedSession) {
+        router.replace('/')
+        return
+      }
+
+      // 确保会话ID在列表中
+      addSessionId(sessionId)
+      setSession(fetchedSession)
+      setLoading(false)
     }
-  }, [recordId, record, history, router]);
 
-  if (!record) {
+    loadSession()
+  }, [sessionId, fetchSession, addSessionId, router])
+
+  if (loading || !session) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-blue-50 via-white to-white">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-green-50 via-white to-white">
+        <Loader2 className="h-8 w-8 animate-spin text-green-600" />
       </div>
-    );
+    )
   }
 
-  const isZh = record.language === 'zh-CN';
+  const isZh = session.language === 'zh-CN'
 
-  const handleDownload = () => {
-    if (record.downloadUrl) {
-      const link = document.createElement('a');
-      link.href = record.downloadUrl;
-      link.download = `${record.topic}.pptx`;
-      link.click();
+  const handleDownload = async () => {
+    if (!sessionId) return
+
+    setDownloading(true)
+    try {
+      // 每次都调用 export API 生成新的 PPTX
+      const response = await fetch(`/api/session/${sessionId}/export`, {
+        method: 'POST',
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Export failed')
+      }
+
+      const result = await response.json()
+
+      if (result.downloadUrl) {
+        const link = document.createElement('a')
+        link.href = result.downloadUrl
+        link.download = `${session.topic}.pptx`
+        link.click()
+      }
+    } catch (error) {
+      console.error('Download failed:', error)
+      alert(isZh ? '下载失败，请重试' : 'Download failed, please try again')
+    } finally {
+      setDownloading(false)
     }
-  };
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-green-50 via-white to-white">
@@ -68,7 +111,7 @@ function ResultContent() {
             <h1 className="mb-3 text-2xl font-bold text-gray-900 sm:text-3xl">
               {isZh ? '生成完成！' : 'Generation Complete!'}
             </h1>
-            <p className="text-gray-500">&ldquo;{record.topic}&rdquo;</p>
+            <p className="text-gray-500">&ldquo;{session.topic}&rdquo;</p>
           </div>
 
           {/* 大纲预览卡片 */}
@@ -84,28 +127,52 @@ function ResultContent() {
 
               {/* 大纲列表 */}
               <div className="mb-6 max-h-64 space-y-1 overflow-y-auto rounded-xl bg-gray-50 p-4">
-                {record.outline.map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-white"
-                  >
-                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600">
-                      {index + 1}
-                    </span>
-                    <span className="text-sm text-gray-700">{item.title}</span>
-                  </div>
-                ))}
+                {session.outline && session.outline.length > 0 ? (
+                  session.outline.map((item, index) => (
+                    <div
+                      key={index}
+                      className="flex items-start gap-3 rounded-lg p-2 transition-colors hover:bg-white"
+                    >
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-600">
+                        {index + 1}
+                      </span>
+                      <span className="text-sm text-gray-700">{item.title}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    {isZh ? '暂无大纲数据' : 'No outline data'}
+                  </p>
+                )}
               </div>
+
+              {/* 幻灯片数量 */}
+              {session.dslPresentation?.slides?.length && (
+                <p className="mb-4 text-sm text-gray-500">
+                  {isZh
+                    ? `共 ${session.dslPresentation.slides.length} 张幻灯片`
+                    : `${session.dslPresentation.slides.length} slides total`}
+                </p>
+              )}
 
               {/* 下载按钮 */}
               <Button
                 size="lg"
                 className="h-12 w-full bg-gradient-to-r from-green-500 to-emerald-600 text-base font-medium shadow-lg shadow-green-600/25 transition-all duration-200 hover:shadow-xl hover:shadow-green-600/30"
                 onClick={handleDownload}
-                disabled={!record.downloadUrl}
+                disabled={downloading || !session.dslPresentation}
               >
-                <Download className="mr-2 h-5 w-5" />
-                {isZh ? '下载 PPTX 文件' : 'Download PPTX File'}
+                {downloading ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    {isZh ? '正在生成...' : 'Generating...'}
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-2 h-5 w-5" />
+                    {isZh ? '下载 PPTX 文件' : 'Download PPTX File'}
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -136,7 +203,7 @@ function ResultContent() {
         </div>
       </main>
     </div>
-  );
+  )
 }
 
 export default function ResultPage() {
@@ -150,5 +217,5 @@ export default function ResultPage() {
     >
       <ResultContent />
     </Suspense>
-  );
+  )
 }

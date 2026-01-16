@@ -1,25 +1,8 @@
+import type { PresentationDSL } from './slide-dsl'
+
 export interface OutlineItem {
   title: string
   points: string[]
-}
-
-// 幻灯片类型
-export type SlideType =
-  | 'cover'
-  | 'toc'
-  | 'content'
-  | 'section'
-  | 'summary'
-  | 'thanks'
-
-// 详细的幻灯片内容
-export interface SlideContent {
-  type: SlideType
-  title: string
-  subtitle?: string
-  points?: string[]
-  details?: string[] // 每个要点的详细说明
-  notes?: string // 演讲备注
 }
 
 // 搜索资料结果
@@ -32,26 +15,6 @@ export interface ResourceData {
     rawContent?: string // 完整网页内容
   }[]
   collectedAt: string
-}
-
-// 生成上下文（保存中间数据）
-export interface GenerationContext {
-  topic: string
-  language: 'zh-CN' | 'en-US'
-  duration: number
-  resources: ResourceData | null
-  outline: OutlineItem[]
-  slides: SlideContent[]
-}
-
-export interface GenerationRecord {
-  id: string
-  topic: string
-  language: 'zh-CN' | 'en-US'
-  duration: number
-  outline: OutlineItem[]
-  createdAt: string
-  downloadUrl?: string
 }
 
 export type GenerationStage =
@@ -74,8 +37,7 @@ export interface GenerationSession {
   // 中间数据
   resources?: ResourceData
   outline?: OutlineItem[]
-  slides?: SlideContent[]
-  downloadUrl?: string
+  dslPresentation?: PresentationDSL // DSL格式内容
   // 时间戳
   createdAt: string
   updatedAt: string
