@@ -1,30 +1,31 @@
-import { getSearchConfig } from './config';
+import { getSearchConfig } from './config'
 
 export interface SearchResult {
-  title: string;
-  url: string;
-  content: string;
+  title: string
+  url: string
+  content: string // 搜索摘要
+  rawContent?: string // 完整网页内容
 }
 
 export interface SearchResponse {
-  results: SearchResult[];
-  query: string;
+  results: SearchResult[]
+  query: string
 }
 
 /**
  * 搜索服务客户端
  */
 class SearchClient {
-  private provider: 'tavily' | 'serp';
-  private apiKey: string;
+  private provider: 'tavily' | 'serp'
+  private apiKey: string
 
   constructor() {
-    const config = getSearchConfig();
+    const config = getSearchConfig()
     if (!config) {
-      throw new Error('No search API key configured');
+      throw new Error('No search API key configured')
     }
-    this.provider = config.provider;
-    this.apiKey = config.apiKey;
+    this.provider = config.provider
+    this.apiKey = config.apiKey
   }
 
   /**
@@ -32,13 +33,16 @@ class SearchClient {
    */
   async search(query: string, maxResults: number = 5): Promise<SearchResponse> {
     if (this.provider === 'tavily') {
-      return this.searchWithTavily(query, maxResults);
+      return this.searchWithTavily(query, maxResults)
     } else {
-      return this.searchWithSerp(query, maxResults);
+      return this.searchWithSerp(query, maxResults)
     }
   }
 
-  private async searchWithTavily(query: string, maxResults: number): Promise<SearchResponse> {
+  private async searchWithTavily(
+    query: string,
+    maxResults: number
+  ): Promise<SearchResponse> {
     const response = await fetch('https://api.tavily.com/search', {
       method: 'POST',
       headers: {
@@ -49,73 +53,86 @@ class SearchClient {
         query,
         max_results: maxResults,
         include_answer: false,
-        include_raw_content: false,
+        include_raw_content: false, // 不使用Tavily获取原始内容，由scraper抓取
       }),
-    });
+    })
 
     if (!response.ok) {
-      throw new Error(`Tavily search failed: ${response.statusText}`);
+      throw new Error(`Tavily search failed: ${response.statusText}`)
     }
 
-    const data = await response.json();
+    const data = await response.json()
 
     return {
       query,
-      results: (data.results || []).map((r: { title: string; url: string; content: string }) => ({
-        title: r.title,
-        url: r.url,
-        content: r.content,
-      })),
-    };
+      results: (data.results || []).map(
+        (r: {
+          title: string
+          url: string
+          content: string
+        }) => ({
+          title: r.title,
+          url: r.url,
+          content: r.content,
+        })
+      ),
+    }
   }
 
-  private async searchWithSerp(query: string, maxResults: number): Promise<SearchResponse> {
+  private async searchWithSerp(
+    query: string,
+    maxResults: number
+  ): Promise<SearchResponse> {
     const params = new URLSearchParams({
       api_key: this.apiKey,
       q: query,
       num: maxResults.toString(),
-    });
+    })
 
-    const response = await fetch(`https://serpapi.com/search?${params.toString()}`);
+    const response = await fetch(
+      `https://serpapi.com/search?${params.toString()}`
+    )
 
     if (!response.ok) {
-      throw new Error(`SerpAPI search failed: ${response.statusText}`);
+      throw new Error(`SerpAPI search failed: ${response.statusText}`)
     }
 
-    const data = await response.json();
-    const organicResults = data.organic_results || [];
+    const data = await response.json()
+    const organicResults = data.organic_results || []
 
     return {
       query,
-      results: organicResults.slice(0, maxResults).map((r: { title: string; link: string; snippet: string }) => ({
-        title: r.title,
-        url: r.link,
-        content: r.snippet,
-      })),
-    };
+      results: organicResults
+        .slice(0, maxResults)
+        .map((r: { title: string; link: string; snippet: string }) => ({
+          title: r.title,
+          url: r.link,
+          content: r.snippet,
+        })),
+    }
   }
 }
 
 // 单例模式
-let searchClient: SearchClient | null = null;
+let searchClient: SearchClient | null = null
 
 export function getSearchClient(): SearchClient {
   if (!searchClient) {
-    searchClient = new SearchClient();
+    searchClient = new SearchClient()
   }
-  return searchClient;
+  return searchClient
 }
 
 /**
  * 检查搜索服务是否可用
  */
 export function isSearchAvailable(): boolean {
-  return getSearchConfig() !== null;
+  return getSearchConfig() !== null
 }
 
 /**
  * 重置客户端
  */
 export function resetSearchClient(): void {
-  searchClient = null;
+  searchClient = null
 }

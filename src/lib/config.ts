@@ -21,7 +21,8 @@ export function getAIConfig(): AIConfig {
   const provider = (process.env.AI_PROVIDER || 'openai') as AIProvider;
   const apiKey = process.env.API_KEY;
   const baseUrl = process.env.BASE_URL;
-  const model = process.env.MODEL || (provider === 'openai' ? 'gpt-4o' : 'claude-sonnet-4-20250514');
+  // 支持 MODEL 或 MODE 环境变量
+  const model = process.env.MODEL || process.env.MODE || (provider === 'openai' ? 'gpt-4o' : 'claude-sonnet-4-20250514');
 
   if (!apiKey) {
     throw new Error('API_KEY is not configured in environment variables');
