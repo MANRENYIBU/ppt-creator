@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI PPT Creator
 
-## Getting Started
+智能演示文稿生成器 - 输入主题，AI帮你生成专业PPT。
 
-First, run the development server:
+## 功能特性
+
+- **智能生成**：输入主题、选择语言和演讲时长，AI自动生成PPT
+- **联网搜索**：实时搜索相关资料，确保内容准确专业
+- **多语言支持**：支持中文和英文生成
+- **即时导出**：一键下载PPTX文件
+- **历史记录**：本地保存生成历史，随时查看下载
+
+## 技术栈
+
+- **框架**: Next.js 16 (App Router)
+- **UI**: Tailwind CSS + shadcn/ui
+- **状态管理**: Zustand
+- **PPT生成**: PptxGenJS
+- **语言**: TypeScript
+
+## 快速开始
+
+### 安装依赖
+
+```bash
+npm install
+```
+
+### 配置环境变量
+
+复制环境变量模板并填入你的API密钥：
+
+```bash
+cp .env.example .env.local
+```
+
+需要配置的环境变量：
+
+```env
+# AI服务 (二选一)
+OPENAI_API_KEY=your_openai_api_key
+# 或
+ANTHROPIC_API_KEY=your_anthropic_api_key
+
+# 联网搜索 (二选一)
+TAVILY_API_KEY=your_tavily_api_key
+# 或
+SERP_API_KEY=your_serp_api_key
+```
+
+### 启动开发服务器
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+打开 [http://localhost:3000](http://localhost:3000) 查看应用。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 项目结构
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── page.tsx           # 首页 - 输入表单
+│   ├── generate/          # 生成页 - 进度显示
+│   ├── result/            # 结果页 - 预览下载
+│   ├── history/           # 历史页 - 记录列表
+│   └── api/generate/      # API路由
+├── components/            # React组件
+│   ├── header.tsx        # 顶部导航
+│   └── ui/               # shadcn/ui组件
+├── store/                 # Zustand状态管理
+├── types/                 # TypeScript类型定义
+└── lib/                   # 工具函数
+```
 
-## Learn More
+## 可用脚本
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+npm run dev      # 启动开发服务器
+npm run build    # 构建生产版本
+npm run start    # 运行生产版本
+npm run lint     # 代码检查
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 文档
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [产品需求文档](./docs/PRD.md)
+- [UI设计规范](./docs/ui/design-system.md)
 
-## Deploy on Vercel
+## License
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+MIT
