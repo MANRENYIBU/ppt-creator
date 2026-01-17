@@ -30,7 +30,6 @@ export async function POST(
       const outline = await generateOutline(
         session.topic,
         session.language,
-        session.duration,
         session.resources || null
       );
 

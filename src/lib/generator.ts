@@ -1,7 +1,6 @@
 import {
   OutlineItem,
   ResourceData,
-  DURATION_TO_SLIDES,
 } from '@/types'
 import { getAIClient, ChatMessage } from './ai'
 import { getSearchClient, isSearchAvailable } from './search'
@@ -52,13 +51,9 @@ export async function collectResources(
 export async function generateOutline(
   topic: string,
   language: 'zh-CN' | 'en-US',
-  duration: number,
   resources: ResourceData | null
 ): Promise<OutlineItem[]> {
   const aiClient = getAIClient()
-  const slideCount = DURATION_TO_SLIDES[duration]
-  const targetSlides = Math.floor((slideCount.min + slideCount.max) / 2)
-  const contentSlides = targetSlides - 3 // 减去封面、目录、感谢页
 
   // 构建资料上下文（优先使用完整内容）
   const resourceContext =
@@ -77,13 +72,15 @@ export async function generateOutline(
     language === 'zh-CN'
       ? `你是一个专业的演示文稿设计师，擅长将复杂主题组织成清晰的PPT结构。
 
-任务：为主题"${topic}"生成一个${contentSlides}个章节的PPT大纲。
+任务：为主题"${topic}"生成一个完整的PPT大纲。
 
 要求：
-1. 每个章节包含标题和3-4个要点
-2. 内容要专业、有逻辑、有深度
-3. 基于提供的参考资料（如有）确保内容准确
-4. 章节之间要有逻辑递进关系
+1. 根据主题的复杂度和深度，自主决定需要多少个章节（通常4-8个章节比较合适）
+2. 每个章节包含标题和3-5个核心要点
+3. 每个要点都应该是需要详细展开的内容点，不要写得太泛
+4. 内容要专业、有逻辑、有深度
+5. 基于提供的参考资料（如有）确保内容准确
+6. 章节之间要有逻辑递进关系
 
 返回JSON格式：
 {
@@ -95,13 +92,15 @@ export async function generateOutline(
 只返回JSON，不要其他内容。`
       : `You are a professional presentation designer skilled at organizing complex topics into clear PPT structures.
 
-Task: Generate a ${contentSlides}-section PPT outline for "${topic}".
+Task: Generate a comprehensive PPT outline for "${topic}".
 
 Requirements:
-1. Each section has a title and 3-4 key points
-2. Content should be professional, logical, and insightful
-3. Use provided reference materials (if any) for accuracy
-4. Sections should have logical progression
+1. Decide the number of sections based on topic complexity (typically 4-8 sections work well)
+2. Each section should have a title and 3-5 core points
+3. Each point should be substantive enough to require detailed expansion, avoid vague descriptions
+4. Content should be professional, logical, and insightful
+5. Use provided reference materials (if any) for accuracy
+6. Sections should have logical progression
 
 Return JSON format:
 {
@@ -132,7 +131,7 @@ Return only JSON, no other text.`
     console.error('Failed to generate outline:', e)
   }
 
-  return generateDefaultOutline(topic, language, contentSlides)
+  return generateDefaultOutline(topic, language)
 }
 
 // ============ 工具函数 ============
@@ -142,8 +141,7 @@ Return only JSON, no other text.`
  */
 function generateDefaultOutline(
   topic: string,
-  language: 'zh-CN' | 'en-US',
-  sectionCount: number
+  language: 'zh-CN' | 'en-US'
 ): OutlineItem[] {
   const isZh = language === 'zh-CN'
 
@@ -217,5 +215,5 @@ function generateDefaultOutline(
         },
       ]
 
-  return defaultSections.slice(0, sectionCount)
+  return defaultSections
 }

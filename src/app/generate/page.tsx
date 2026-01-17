@@ -44,7 +44,6 @@ function GenerateContent() {
   // URL参数
   const topic = searchParams.get('topic') || '';
   const language = (searchParams.get('language') || 'zh-CN') as 'zh-CN' | 'en-US';
-  const duration = parseInt(searchParams.get('duration') || '15', 10);
   const sessionId = searchParams.get('session');
   const isZh = language === 'zh-CN';
 
@@ -73,7 +72,7 @@ function GenerateContent() {
       const response = await fetch('/api/session/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, language, duration }),
+        body: JSON.stringify({ topic, language }),
       });
 
       if (!response.ok) {
@@ -100,7 +99,7 @@ function GenerateContent() {
     } finally {
       setLoading(false);
     }
-  }, [topic, language, duration, router, addSessionId]);
+  }, [topic, language, router, addSessionId]);
 
   // 获取会话状态
   const fetchSession = useCallback(async (id: string) => {

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, Zap, Clock, Globe } from 'lucide-react';
+import { Sparkles, Zap, Globe } from 'lucide-react';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,14 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { DURATION_OPTIONS } from '@/types';
 
 export default function HomePage() {
   const router = useRouter();
 
   const [topic, setTopic] = useState('');
   const [language, setLanguage] = useState<'zh-CN' | 'en-US'>('zh-CN');
-  const [duration, setDuration] = useState<number>(15);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,7 +27,6 @@ export default function HomePage() {
     const params = new URLSearchParams({
       topic: topic.trim(),
       language,
-      duration: duration.toString(),
     });
 
     router.push(`/generate?${params.toString()}`);
@@ -109,30 +106,6 @@ export default function HomePage() {
                       <SelectItem value="en-US">English</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-
-                {/* 时长选择 */}
-                <div className="space-y-3 text-left">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                    <Clock className="h-4 w-4 text-blue-500" />
-                    演讲时长
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {DURATION_OPTIONS.map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setDuration(d)}
-                        className={`cursor-pointer rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
-                          duration === d
-                            ? 'bg-blue-600 text-white shadow-md shadow-blue-600/25'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        {d} 分钟
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
                 {/* 提交按钮 */}

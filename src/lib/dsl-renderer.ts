@@ -556,16 +556,17 @@ export class DSLRenderer {
     block: CodeBlock,
     pos: Position
   ): number {
-    const lineHeight = 0.22
-    const padding = 0.15
+    const lineHeight = 0.16  // 减小行高以容纳更多行
+    const padding = 0.12
     const height = block.lines.length * lineHeight + padding * 2
+    const maxHeight = 3.5  // 增加最大高度
 
     // 背景
     slide.addShape('rect', {
       x: pos.x,
       y: pos.y,
       w: pos.w,
-      h: Math.min(height, 2.5), // 限制最大高度
+      h: Math.min(height, maxHeight),
       fill: { color: THEME.backgroundCode },
       line: { color: THEME.border, width: 0.5 },
     })
@@ -574,10 +575,10 @@ export class DSLRenderer {
     if (block.language) {
       slide.addText(block.language.toUpperCase(), {
         x: pos.x + pos.w - 0.8,
-        y: pos.y + 0.05,
+        y: pos.y + 0.03,
         w: 0.7,
-        h: 0.2,
-        fontSize: 8,
+        h: 0.18,
+        fontSize: 7,
         color: THEME.textMuted,
         fontFace: FONTS.code,
         align: 'right',
@@ -590,8 +591,8 @@ export class DSLRenderer {
       x: pos.x + padding,
       y: pos.y + padding,
       w: pos.w - padding * 2,
-      h: Math.min(height - padding * 2, 2.2),
-      fontSize: 10,
+      h: Math.min(height - padding * 2, maxHeight - padding * 2),
+      fontSize: 8,  // 减小字体
       color: THEME.text,
       fontFace: FONTS.code,
       valign: 'top',
@@ -601,18 +602,18 @@ export class DSLRenderer {
     if (block.caption) {
       slide.addText(block.caption, {
         x: pos.x,
-        y: pos.y + Math.min(height, 2.5) + 0.05,
+        y: pos.y + Math.min(height, maxHeight) + 0.05,
         w: pos.w,
         h: 0.2,
-        fontSize: 10,
+        fontSize: 9,
         color: THEME.textMuted,
         fontFace: FONTS.body,
         align: 'center',
       })
-      return Math.min(height, 2.5) + 0.3
+      return Math.min(height, maxHeight) + 0.3
     }
 
-    return Math.min(height, 2.5)
+    return Math.min(height, maxHeight)
   }
 
   /**

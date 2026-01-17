@@ -25,8 +25,7 @@ function getSessionPath(id: string): string {
 export async function createSession(
   id: string,
   topic: string,
-  language: 'zh-CN' | 'en-US',
-  duration: number
+  language: 'zh-CN' | 'en-US'
 ): Promise<GenerationSession> {
   await ensureDir();
 
@@ -34,7 +33,6 @@ export async function createSession(
     id,
     topic,
     language,
-    duration,
     stage: 'idle',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

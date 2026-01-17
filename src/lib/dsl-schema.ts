@@ -1,10 +1,10 @@
 /**
  * Slide DSL Zod Schema
  * 用于验证AI生成的JSON格式
+ * 注意：这里不做严格的长度限制，由后处理函数自动分页
  */
 
 import { z } from 'zod'
-import { DSL_LIMITS } from '@/types/slide-dsl'
 
 // ============ 内容块 Schema ============
 
@@ -13,7 +13,7 @@ import { DSL_LIMITS } from '@/types/slide-dsl'
  */
 export const paragraphBlockSchema = z.object({
   type: z.literal('paragraph'),
-  text: z.string().min(1).max(DSL_LIMITS.MAX_PARAGRAPH_LENGTH),
+  text: z.string().min(1),
   emphasis: z.enum(['normal', 'highlight', 'muted']).optional(),
 })
 
@@ -22,10 +22,7 @@ export const paragraphBlockSchema = z.object({
  */
 export const bulletsBlockSchema = z.object({
   type: z.literal('bullets'),
-  items: z
-    .array(z.string().min(1).max(DSL_LIMITS.MAX_LIST_ITEM_LENGTH))
-    .min(1)
-    .max(DSL_LIMITS.MAX_LIST_ITEMS),
+  items: z.array(z.string().min(1)).min(1),
 })
 
 /**
@@ -33,10 +30,7 @@ export const bulletsBlockSchema = z.object({
  */
 export const numberedBlockSchema = z.object({
   type: z.literal('numbered'),
-  items: z
-    .array(z.string().min(1).max(DSL_LIMITS.MAX_LIST_ITEM_LENGTH))
-    .min(1)
-    .max(DSL_LIMITS.MAX_LIST_ITEMS),
+  items: z.array(z.string().min(1)).min(1),
 })
 
 /**
@@ -45,7 +39,7 @@ export const numberedBlockSchema = z.object({
 export const codeBlockSchema = z.object({
   type: z.literal('code'),
   language: z.string().min(1),
-  lines: z.array(z.string()).min(1).max(DSL_LIMITS.MAX_CODE_LINES),
+  lines: z.array(z.string()).min(1),
   caption: z.string().optional(),
 })
 
@@ -54,14 +48,8 @@ export const codeBlockSchema = z.object({
  */
 export const tableBlockSchema = z.object({
   type: z.literal('table'),
-  headers: z
-    .array(z.string())
-    .min(1)
-    .max(DSL_LIMITS.MAX_TABLE_COLUMNS),
-  rows: z
-    .array(z.array(z.string()))
-    .min(1)
-    .max(DSL_LIMITS.MAX_TABLE_ROWS),
+  headers: z.array(z.string()).min(1),
+  rows: z.array(z.array(z.string())).min(1),
   caption: z.string().optional(),
 })
 
@@ -70,7 +58,7 @@ export const tableBlockSchema = z.object({
  */
 export const quoteBlockSchema = z.object({
   type: z.literal('quote'),
-  text: z.string().min(1).max(DSL_LIMITS.MAX_QUOTE_LENGTH),
+  text: z.string().min(1),
   author: z.string().optional(),
 })
 
@@ -102,23 +90,15 @@ export const slideLayoutSchema = z.enum([
 
 /**
  * 单张幻灯片 Schema
+ * 不做严格限制，由后处理函数自动分页
  */
 export const slideDSLSchema = z.object({
   layout: slideLayoutSchema,
-  title: z.string().max(DSL_LIMITS.MAX_TITLE_LENGTH).optional(),
-  subtitle: z.string().max(DSL_LIMITS.MAX_SUBTITLE_LENGTH).optional(),
-  content: z
-    .array(contentBlockSchema)
-    .max(DSL_LIMITS.MAX_CONTENT_BLOCKS_PER_SLIDE)
-    .optional(),
-  leftContent: z
-    .array(contentBlockSchema)
-    .max(DSL_LIMITS.MAX_CONTENT_BLOCKS_PER_COLUMN)
-    .optional(),
-  rightContent: z
-    .array(contentBlockSchema)
-    .max(DSL_LIMITS.MAX_CONTENT_BLOCKS_PER_COLUMN)
-    .optional(),
+  title: z.string().optional(),
+  subtitle: z.string().optional(),
+  content: z.array(contentBlockSchema).optional(),
+  leftContent: z.array(contentBlockSchema).optional(),
+  rightContent: z.array(contentBlockSchema).optional(),
   notes: z.string().optional(),
 })
 

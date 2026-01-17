@@ -152,29 +152,31 @@ export type DSLParseResult = DSLParseSuccess | DSLParseError
 
 /**
  * DSL内容限制配置
- * 用于Prompt提示和Schema验证
+ * 用于自动分页的阈值，超出限制的内容会被自动拆分到多张幻灯片
  */
 export const DSL_LIMITS = {
-  /** 每张幻灯片最多内容块数 */
-  MAX_CONTENT_BLOCKS_PER_SLIDE: 4,
+  /** 每张幻灯片最多内容块数（超出自动分页） */
+  MAX_CONTENT_BLOCKS_PER_SLIDE: 3,
   /** 双栏布局每栏最多内容块数 */
-  MAX_CONTENT_BLOCKS_PER_COLUMN: 3,
+  MAX_CONTENT_BLOCKS_PER_COLUMN: 2,
   /** 标题最大长度 */
   MAX_TITLE_LENGTH: 100,
   /** 副标题最大长度 */
   MAX_SUBTITLE_LENGTH: 150,
   /** 段落最大长度 */
   MAX_PARAGRAPH_LENGTH: 300,
-  /** 列表项最大数量 */
-  MAX_LIST_ITEMS: 6,
+  /** 列表项最大数量（超出自动分页） */
+  MAX_LIST_ITEMS: 8,
   /** 单个列表项最大长度 */
   MAX_LIST_ITEM_LENGTH: 100,
-  /** 代码块最大行数 */
-  MAX_CODE_LINES: 15,
+  /** 代码块最大行数（超出自动分页） */
+  MAX_CODE_LINES: 25,
+  /** 代码行最大字符数 */
+  MAX_CODE_LINE_LENGTH: 80,
   /** 表格最大列数 */
   MAX_TABLE_COLUMNS: 5,
-  /** 表格最大行数 */
-  MAX_TABLE_ROWS: 6,
+  /** 表格最大行数（超出自动分页） */
+  MAX_TABLE_ROWS: 8,
   /** 引用最大长度 */
   MAX_QUOTE_LENGTH: 200,
 } as const

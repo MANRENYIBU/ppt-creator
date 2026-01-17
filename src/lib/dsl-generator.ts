@@ -3,94 +3,219 @@
  * 使用AI生成JSON DSL格式的幻灯片内容
  */
 
-import { OutlineItem, ResourceData, DURATION_TO_SLIDES } from '@/types'
-import { PresentationDSL, SlideDSL, DSL_LIMITS } from '@/types/slide-dsl'
+import { OutlineItem, ResourceData } from '@/types'
+import { PresentationDSL, SlideDSL } from '@/types/slide-dsl'
 import { getAIClient, ChatMessage } from './ai'
-import { parseDSL, parseDSLLenient } from './dsl-parser'
+import { autoSplitSlides } from './dsl-parser'
+
+// ============ 内容块校验 ============
+
+/** 有效的内容块类型（共6种，不可扩展） */
+const VALID_CONTENT_BLOCK_TYPES = new Set([
+  'paragraph',
+  'bullets',
+  'numbered',
+  'code',
+  'table',
+  'quote',
+])
+
+/**
+ * 校验内容块数组中的所有类型是否有效
+ */
+function validateContentBlocks(blocks: unknown): boolean {
+  if (!Array.isArray(blocks)) return true // 空数组或非数组视为有效
+
+  for (const block of blocks) {
+    if (typeof block !== 'object' || block === null) continue
+    const blockType = (block as Record<string, unknown>).type
+    if (typeof blockType === 'string' && !VALID_CONTENT_BLOCK_TYPES.has(blockType)) {
+      console.warn(`[DSL Generator] Invalid content block type: "${blockType}"`)
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * 校验幻灯片是否有效
+ * 检查 content、leftContent、rightContent 中的内容块类型
+ */
+function validateSlide(slide: Record<string, unknown>): boolean {
+  // 检查 content 字段
+  if (!validateContentBlocks(slide.content)) {
+    return false
+  }
+  // 检查 leftContent 字段
+  if (!validateContentBlocks(slide.leftContent)) {
+    return false
+  }
+  // 检查 rightContent 字段
+  if (!validateContentBlocks(slide.rightContent)) {
+    return false
+  }
+  return true
+}
 
 // ============ Prompt 模板 ============
 
-const SYSTEM_PROMPT_ZH = `你是专业的演示文稿设计师。根据章节大纲生成幻灯片内容。
+// DSL Schema 规范（传递给AI）
+const DSL_SCHEMA_SPEC = `
+## Slide DSL Schema 规范
 
-输出格式为JSON，结构如下：
+### 布局类型 (SlideLayout) - 幻灯片级别
+type SlideLayout = 'title-content' | 'two-column' | 'comparison'
+
+布局类型说明：
+- title-content: 单栏布局，使用 content 字段放置内容块
+- two-column: 双栏布局，使用 leftContent 和 rightContent 字段
+- comparison: 对比布局，使用 leftContent 和 rightContent 字段，适合左右对比展示
+
+注意：不要生成 'title-only' 或 'section' 布局，这些由系统自动生成。
+
+### 内容块类型 (ContentBlock) - 共6种，不可扩展
+
+⚠️ 重要：内容块类型只有以下6种，不要使用任何其他类型名称！
+
+1. paragraph - 段落文本
 {
-  "slides": [
+  "type": "paragraph",
+  "text": string,
+  "emphasis"?: "normal" | "highlight" | "muted"
+}
+
+2. bullets - 无序列表
+{
+  "type": "bullets",
+  "items": string[]
+}
+
+3. numbered - 有序列表
+{
+  "type": "numbered",
+  "items": string[]
+}
+
+4. code - 代码块
+{
+  "type": "code",
+  "language": string,      // 编程语言，如 "go", "python", "javascript"
+  "lines": string[],       // 代码行数组（每行一个字符串）
+  "caption"?: string
+}
+
+5. table - 表格（用于数据对比、特性对比等）
+{
+  "type": "table",
+  "headers": string[],     // 表头数组
+  "rows": string[][],      // 数据行数组
+  "caption"?: string
+}
+
+6. quote - 引用
+{
+  "type": "quote",
+  "text": string,
+  "author"?: string
+}
+
+### 幻灯片结构 (SlideDSL)
+{
+  "layout": SlideLayout,           // 必填：title-content / two-column / comparison
+  "title": string,                 // 必填：幻灯片标题
+  "subtitle"?: string,
+  "content"?: ContentBlock[],      // 用于 title-content 布局
+  "leftContent"?: ContentBlock[],  // 用于 two-column/comparison 布局
+  "rightContent"?: ContentBlock[], // 用于 two-column/comparison 布局
+  "notes"?: string
+}
+
+### 使用示例
+
+示例1: title-content 布局 + 表格对比
+{
+  "layout": "title-content",
+  "title": "数组与切片对比",
+  "content": [
     {
-      "layout": "title-content",
-      "title": "幻灯片标题",
-      "content": [
-        { "type": "paragraph", "text": "段落文本..." },
-        { "type": "bullets", "items": ["要点1", "要点2"] },
-        { "type": "code", "language": "python", "lines": ["def foo():", "    pass"] },
-        { "type": "table", "headers": ["列1", "列2"], "rows": [["值1", "值2"]] },
-        { "type": "quote", "text": "引用内容", "author": "作者" }
+      "type": "table",
+      "headers": ["特性", "数组", "切片"],
+      "rows": [
+        ["长度", "固定", "动态"],
+        ["内存", "值类型", "引用类型"]
       ]
     }
   ]
 }
 
-布局类型(layout)：
-- "section": 章节分隔页，只有标题，用于开启新章节
-- "title-content": 标题+内容，最常用
-- "two-column": 双栏布局，使用leftContent和rightContent
-
-内容块类型：
-- paragraph: 文本段落（不超过${DSL_LIMITS.MAX_PARAGRAPH_LENGTH}字）
-- bullets: 无序列表（不超过${DSL_LIMITS.MAX_LIST_ITEMS}项）
-- numbered: 有序列表（不超过${DSL_LIMITS.MAX_LIST_ITEMS}项）
-- code: 代码块，用lines数组表示每行（不超过${DSL_LIMITS.MAX_CODE_LINES}行）
-- table: 表格（不超过${DSL_LIMITS.MAX_TABLE_COLUMNS}列×${DSL_LIMITS.MAX_TABLE_ROWS}行）
-- quote: 引用
-
-要求：
-1. 每张幻灯片最多${DSL_LIMITS.MAX_CONTENT_BLOCKS_PER_SLIDE}个内容块
-2. 内容类型要多样化，不要全是bullets
-3. 技术主题必须包含代码示例
-4. 数据对比使用表格
-5. 重要观点使用引用
-
-只输出JSON，不要其他内容。`
-
-const SYSTEM_PROMPT_EN = `You are a professional presentation designer. Generate slide content based on section outline.
-
-Output format is JSON with the following structure:
+示例2: comparison 布局（左右对比）
 {
-  "slides": [
-    {
-      "layout": "title-content",
-      "title": "Slide Title",
-      "content": [
-        { "type": "paragraph", "text": "Paragraph text..." },
-        { "type": "bullets", "items": ["Point 1", "Point 2"] },
-        { "type": "code", "language": "python", "lines": ["def foo():", "    pass"] },
-        { "type": "table", "headers": ["Col1", "Col2"], "rows": [["Val1", "Val2"]] },
-        { "type": "quote", "text": "Quote content", "author": "Author" }
-      ]
-    }
+  "layout": "comparison",
+  "title": "同步 vs 异步",
+  "leftContent": [
+    { "type": "paragraph", "text": "同步执行", "emphasis": "highlight" },
+    { "type": "bullets", "items": ["阻塞调用", "顺序执行"] }
+  ],
+  "rightContent": [
+    { "type": "paragraph", "text": "异步执行", "emphasis": "highlight" },
+    { "type": "bullets", "items": ["非阻塞", "并发执行"] }
   ]
 }
+`
 
-Layout types:
-- "section": Section divider, title only, for starting new chapters
-- "title-content": Title + content, most common
-- "two-column": Two-column layout, uses leftContent and rightContent
+const SYSTEM_PROMPT_ZH = `你是专业的演示文稿设计师。你的任务是使用 add_slide 工具逐张添加幻灯片。
 
-Content block types:
-- paragraph: Text paragraph (max ${DSL_LIMITS.MAX_PARAGRAPH_LENGTH} chars)
-- bullets: Unordered list (max ${DSL_LIMITS.MAX_LIST_ITEMS} items)
-- numbered: Ordered list (max ${DSL_LIMITS.MAX_LIST_ITEMS} items)
-- code: Code block, use lines array (max ${DSL_LIMITS.MAX_CODE_LINES} lines)
-- table: Table (max ${DSL_LIMITS.MAX_TABLE_COLUMNS} cols × ${DSL_LIMITS.MAX_TABLE_ROWS} rows)
-- quote: Quotation
+${DSL_SCHEMA_SPEC}
 
-Requirements:
-1. Maximum ${DSL_LIMITS.MAX_CONTENT_BLOCKS_PER_SLIDE} content blocks per slide
-2. Diversify content types, avoid all bullets
-3. Technical topics must include code examples
-4. Use tables for data comparison
-5. Use quotes for important insights
+## 工具使用说明
+- 必须使用 add_slide 工具添加每一张幻灯片
+- 每次调用 add_slide 添加一张幻灯片
+- 完成所有幻灯片后，调用 finish_generation 工具结束
 
-Output only JSON, no other text.`
+## 重要规则
+1. 只生成内容页（title-content / two-column / comparison 布局）
+2. 不要生成 section 或 title-only 布局，这些由系统自动处理
+3. 每张幻灯片必须有 title 字段
+4. 内容块类型只能是：paragraph、bullets、numbered、code、table、quote
+5. 数据对比请使用 table 内容块，不要发明新的内容块类型
+
+## 排版建议
+1. 代码块建议独占一张幻灯片
+2. 表格建议独占一张幻灯片
+3. 内容可以充分展开，系统会自动处理分页
+
+## 内容质量要求
+1. 内容类型多样化，不要全是bullets
+2. 技术主题必须包含完整的代码示例
+3. 数据对比使用 table 内容块
+4. 每个要点要有深度内容，充分展开讲解`
+
+const SYSTEM_PROMPT_EN = `You are a professional presentation designer. Your task is to use the add_slide tool to add slides one by one.
+
+${DSL_SCHEMA_SPEC}
+
+## Tool Usage Instructions
+- You MUST use the add_slide tool to add each slide
+- Call add_slide once for each slide
+- After adding all slides, call finish_generation to complete
+
+## Important Rules
+1. Only generate content pages (title-content / two-column / comparison layouts)
+2. Do NOT generate section or title-only layouts - these are handled by the system
+3. Every slide MUST have a title field
+4. Content block types can ONLY be: paragraph, bullets, numbered, code, table, quote
+5. For data comparison, use the table content block - do not invent new content block types
+
+## Layout Suggestions
+1. Code blocks should preferably be on their own slide
+2. Tables should preferably be on their own slide
+3. Content can be fully expanded - the system will handle pagination automatically
+
+## Content Quality Requirements
+1. Diversify content types, avoid all bullets
+2. Technical topics MUST include complete code examples
+3. Use table content blocks for data comparison
+4. Each point should have substantial depth with thorough explanation`
 
 // ============ 主函数 ============
 
@@ -102,23 +227,17 @@ export async function generateDSLPresentation(
   outline: OutlineItem[],
   language: 'zh-CN' | 'en-US',
   resources: ResourceData | null,
-  duration: number = 15
 ): Promise<PresentationDSL> {
   const isZh = language === 'zh-CN'
   const slides: SlideDSL[] = []
-
-  // 计算每个章节的目标幻灯片数
-  const slideCount = DURATION_TO_SLIDES[duration] || { min: 12, max: 15 }
-  const targetTotal = Math.floor((slideCount.min + slideCount.max) / 2)
-  const fixedSlides = 3 // 封面 + 目录 + 感谢
-  const contentSlidesTotal = targetTotal - fixedSlides
-  const slidesPerSection = Math.max(2, Math.floor(contentSlidesTotal / outline.length))
 
   // 1. 封面页
   slides.push({
     layout: 'title-only',
     title: topic,
-    subtitle: isZh ? '专业演示文稿 · AI生成' : 'Professional Presentation · AI Generated',
+    subtitle: isZh
+      ? '专业演示文稿 · AI生成'
+      : 'Professional Presentation · AI Generated',
   })
 
   // 2. 目录页
@@ -144,9 +263,8 @@ export async function generateDSLPresentation(
       section,
       i + 1,
       outline.length,
-      slidesPerSection,
       resourceContext,
-      language
+      language,
     )
     slides.push(...sectionSlides)
   }
@@ -162,16 +280,15 @@ export async function generateDSLPresentation(
 }
 
 /**
- * 为单个章节生成DSL内容
+ * 为单个章节生成DSL内容（使用 Function Calling）
  */
 async function generateSectionDSL(
   topic: string,
   section: OutlineItem,
   sectionIndex: number,
   totalSections: number,
-  targetSlideCount: number,
   resourceContext: string,
-  language: 'zh-CN' | 'en-US'
+  language: 'zh-CN' | 'en-US',
 ): Promise<SlideDSL[]> {
   const isZh = language === 'zh-CN'
   const aiClient = getAIClient()
@@ -180,39 +297,38 @@ async function generateSectionDSL(
   const sectionDivider: SlideDSL = {
     layout: 'section',
     title: section.title,
-    subtitle: isZh ? `第 ${sectionIndex} / ${totalSections} 部分` : `Part ${sectionIndex} of ${totalSections}`,
+    subtitle: isZh
+      ? `第 ${sectionIndex} / ${totalSections} 部分`
+      : `Part ${sectionIndex} of ${totalSections}`,
   }
 
-  // 构建用户提示
   const userPrompt = isZh
     ? `主题：${topic}
 
 当前章节（第${sectionIndex}/${totalSections}部分）：${section.title}
-章节要点：
-${section.points.map((p, i) => `${i + 1}. ${p}`).join('\n')}
 
-需要生成：${targetSlideCount}张内容幻灯片（不包含章节分隔页）
+本章节的核心要点（每个要点都需要充分展开讲解）：
+${section.points.map((p, i) => `${i + 1}. ${p}`).join('\n')}
 ${resourceContext ? `\n参考资料：\n${resourceContext}` : ''}
 
-请生成${targetSlideCount}张幻灯片的JSON内容。确保：
-- 内容丰富，每个要点都有详细展开
-- 根据内容特点选择合适的内容块类型
-- 如果涉及代码，必须包含可运行的代码示例
-- 如果涉及对比，使用表格展示`
+请使用 add_slide 工具为这个章节生成幻灯片。要求：
+1. 每个要点至少2-3张幻灯片来详细展开
+2. 使用多种内容类型（段落、列表、代码、表格、引用）
+3. 代码块和表格建议独占一张幻灯片
+4. 完成后调用 finish_generation 工具`
     : `Topic: ${topic}
 
 Current Section (Part ${sectionIndex}/${totalSections}): ${section.title}
-Section Points:
-${section.points.map((p, i) => `${i + 1}. ${p}`).join('\n')}
 
-Generate: ${targetSlideCount} content slides (excluding section divider)
+Core Points (each needs thorough expansion):
+${section.points.map((p, i) => `${i + 1}. ${p}`).join('\n')}
 ${resourceContext ? `\nReference Materials:\n${resourceContext}` : ''}
 
-Generate JSON content for ${targetSlideCount} slides. Ensure:
-- Rich content with detailed expansion of each point
-- Choose appropriate content block types based on content
-- Include runnable code examples for technical topics
-- Use tables for comparisons`
+Use the add_slide tool to generate slides for this section. Requirements:
+1. At least 2-3 slides per point for detailed explanation
+2. Use diverse content types (paragraphs, lists, code, tables, quotes)
+3. Code blocks and tables should have their own slides
+4. Call finish_generation tool when done`
 
   const messages: ChatMessage[] = [
     { role: 'system', content: isZh ? SYSTEM_PROMPT_ZH : SYSTEM_PROMPT_EN },
@@ -220,26 +336,48 @@ Generate JSON content for ${targetSlideCount} slides. Ensure:
   ]
 
   try {
-    const response = await aiClient.chat(messages)
+    console.log(`[DSL Generator] Section ${sectionIndex}: Starting function calling...`)
 
-    // 尝试解析JSON
-    let result = parseDSL(response.content)
+    const rawSlides = await aiClient.generateSlidesWithTools(
+      messages,
+      (slide) => {
+        // 校验内容块类型是否有效
+        const isValid = validateSlide(slide)
+        if (isValid) {
+          console.log(`[DSL Generator] Section ${sectionIndex}: Added slide "${slide.title}"`)
+        } else {
+          console.warn(`[DSL Generator] Section ${sectionIndex}: Slide "${slide.title}" has invalid content blocks, requesting regeneration`)
+        }
+        return isValid
+      }
+    )
 
-    // 如果严格解析失败，尝试宽松解析
-    if (!result.success) {
-      console.warn('Strict DSL parse failed, trying lenient mode:', result.error)
-      result = parseDSLLenient(response.content)
-    }
+    console.log(`[DSL Generator] Section ${sectionIndex}: Generated ${rawSlides.length} slides via function calling`)
 
-    if (result.success && result.data.slides.length > 0) {
-      return [sectionDivider, ...result.data.slides]
+    if (rawSlides.length > 0) {
+      // 将原始数据转换为 SlideDSL 类型
+      const slides: SlideDSL[] = rawSlides.map((raw) => ({
+        layout: (raw.layout as SlideDSL['layout']) || 'title-content',
+        title: raw.title as string,
+        subtitle: raw.subtitle as string | undefined,
+        content: raw.content as SlideDSL['content'],
+        leftContent: raw.leftContent as SlideDSL['leftContent'],
+        rightContent: raw.rightContent as SlideDSL['rightContent'],
+        notes: raw.notes as string | undefined,
+      }))
+
+      // 应用自动分页
+      const { slides: processedSlides } = autoSplitSlides({ slides })
+
+      return [sectionDivider, ...processedSlides]
     }
   } catch (e) {
-    console.error('Failed to generate section DSL:', e)
+    console.error('Failed to generate section DSL with function calling:', e)
   }
 
-  // 降级方案
-  return [sectionDivider, ...generateFallbackDSL(section, targetSlideCount, isZh)]
+  // 降级方案 - 每个要点生成一张幻灯片
+  console.log(`[DSL Generator] Section ${sectionIndex}: Using fallback generation`)
+  return [sectionDivider, ...generateFallbackDSL(section, isZh)]
 }
 
 /**
@@ -254,57 +392,36 @@ function buildResourceContext(resources: ResourceData | null): string {
     .slice(0, 3) // 只取前3条
     .map((r) => {
       const content = r.rawContent || r.content
-      const truncated = content.length > 800 ? content.slice(0, 800) + '...' : content
+      const truncated =
+        content.length > 800 ? content.slice(0, 800) + '...' : content
       return `【${r.title}】\n${truncated}`
     })
     .join('\n\n')
 }
 
 /**
- * 降级方案：生成基础DSL
+ * 降级方案：为每个要点生成一张幻灯片
  */
-function generateFallbackDSL(
-  section: OutlineItem,
-  targetCount: number,
-  isZh: boolean
-): SlideDSL[] {
+function generateFallbackDSL(section: OutlineItem, isZh: boolean): SlideDSL[] {
   const slides: SlideDSL[] = []
 
   // 为每个要点生成一张幻灯片
-  for (let i = 0; i < Math.min(section.points.length, targetCount); i++) {
+  for (const point of section.points) {
     slides.push({
       layout: 'title-content',
-      title: section.points[i],
+      title: point,
       content: [
         {
           type: 'paragraph',
           text: isZh
-            ? `${section.points[i]}是${section.title}的重要组成部分，对理解整体概念至关重要。`
-            : `${section.points[i]} is a key component of ${section.title}, essential for understanding the overall concept.`,
+            ? `${point}是${section.title}的核心内容之一。`
+            : `${point} is one of the core aspects of ${section.title}.`,
         },
         {
           type: 'bullets',
           items: isZh
-            ? ['核心概念解析', '关键要素说明', '实践应用建议']
-            : ['Core concept analysis', 'Key elements explained', 'Practical applications'],
-        },
-      ],
-    })
-  }
-
-  // 如果还需要更多幻灯片
-  while (slides.length < targetCount) {
-    slides.push({
-      layout: 'title-content',
-      title: isZh
-        ? `${section.title} - 深入分析`
-        : `${section.title} - Deep Dive`,
-      content: [
-        {
-          type: 'bullets',
-          items: isZh
-            ? ['详细分析', '案例研究', '关键启示', '总结要点']
-            : ['Detailed analysis', 'Case study', 'Key insights', 'Summary points'],
+            ? ['核心概念', '关键要点', '应用场景']
+            : ['Core concept', 'Key points', 'Applications'],
         },
       ],
     })

@@ -7,7 +7,6 @@ import {
   Trash2,
   Plus,
   FileText,
-  Clock,
   Globe,
   Sparkles,
   Loader2,
@@ -236,10 +235,6 @@ export default function HistoryPage() {
                           <Globe className="h-3.5 w-3.5" />
                           {isZh ? '中文' : 'English'}
                         </span>
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3.5 w-3.5" />
-                          {session.duration}分钟
-                        </span>
                         <span
                           className={`rounded-full px-2 py-0.5 text-xs ${
                             isCompleted
@@ -267,7 +262,7 @@ export default function HistoryPage() {
                           asChild
                         >
                           <Link
-                            href={`/generate?topic=${encodeURIComponent(session.topic)}&language=${session.language}&duration=${session.duration}&session=${session.id}`}
+                            href={`/generate?topic=${encodeURIComponent(session.topic)}&language=${session.language}&session=${session.id}`}
                           >
                             继续
                           </Link>

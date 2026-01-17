@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { GenerateRequest, DURATION_TO_SLIDES } from '@/types';
+import { GenerateRequest } from '@/types';
 import { validateConfig } from '@/lib/config';
 import { createSession, cleanupOldSessions } from '@/lib/session';
 
@@ -16,12 +16,12 @@ export async function POST(request: NextRequest) {
     }
 
     const body: GenerateRequest = await request.json();
-    const { topic, language, duration } = body;
+    const { topic, language } = body;
 
     // 参数验证
-    if (!topic || !language || !duration) {
+    if (!topic || !language) {
       return NextResponse.json(
-        { error: 'Missing required fields: topic, language, duration' },
+        { error: 'Missing required fields: topic, language' },
         { status: 400 }
       );
     }
@@ -40,20 +40,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const slideCount = DURATION_TO_SLIDES[duration];
-    if (!slideCount) {
-      return NextResponse.json(
-        { error: 'Invalid duration, must be 5, 10, 15, 20, or 30' },
-        { status: 400 }
-      );
-    }
-
     // 清理旧会话（后台执行）
     cleanupOldSessions().catch(console.error);
 
     // 创建新会话
     const sessionId = uuidv4();
-    const session = await createSession(sessionId, topic, language, duration);
+    const session = await createSession(sessionId, topic, language);
 
     return NextResponse.json(session);
   } catch (error) {
