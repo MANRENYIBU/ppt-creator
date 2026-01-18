@@ -36,10 +36,27 @@ User Input → Create Session → AI Research (Collect + Summarize) → Generate
 The pipeline is implemented as a multi-step API workflow with session-based state persistence:
 
 1. **Session Creation** (`POST /api/session/create`) - Creates session with topic, language
-2. **Resource Collection** (`POST /api/session/[id]/collect`) - AI-driven research with function calling
-3. **Outline Generation** (`POST /api/session/[id]/outline`) - AI generates section structure using research summary
-4. **Content Generation** (`POST /api/session/[id]/content`) - AI generates DSL slides for each section
-5. **PPTX Export** (`POST /api/session/[id]/export`) - DSLRenderer converts to PPTX with selected theme
+2. **Unified Generation** (`POST /api/session/[id]/generate`) - Auto-executes next stage based on current state
+3. **PPTX Export** (`POST /api/session/[id]/export`) - DSLRenderer converts to PPTX with selected theme
+
+**Legacy Individual Stage APIs** (still available but not recommended):
+- `POST /api/session/[id]/collect` - Resource collection only
+- `POST /api/session/[id]/outline` - Outline generation only
+- `POST /api/session/[id]/content` - Content generation only
+
+### Frontend Polling Architecture
+
+The frontend uses a polling-based approach for reliability:
+
+1. **Home page** creates session via `/api/session/create`
+2. **Generate page** polls session status + triggers `/api/session/[id]/generate`
+3. The generate API checks current stage and executes the next step:
+   - `idle` → `collecting` (AI research)
+   - `collecting` → `outlining` (generate outline)
+   - `outlining` → `generating` (generate DSL slides)
+   - `generating` → `completed`
+4. Frontend polls every 2s, triggers generate API when stage changes
+5. On completion, redirects to result page for theme selection and export
 
 ### AI-Driven Resource Collection
 

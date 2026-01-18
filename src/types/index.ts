@@ -41,6 +41,7 @@ export interface GenerationSession {
   language: 'zh-CN' | 'en-US'
   theme?: ThemeName // PPT主题颜色
   stage: GenerationStage
+  processing?: boolean // 是否正在处理中（防止重复触发）
   error?: string
   // 中间数据
   resources?: ResourceData

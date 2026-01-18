@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, Zap, Globe } from 'lucide-react';
+import { Sparkles, Zap, Globe, Loader2 } from 'lucide-react';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,23 +13,55 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useGenerationStore } from '@/store/generation';
+import { GenerationSession } from '@/types';
 
 export default function HomePage() {
   const router = useRouter();
+  const { addSessionId } = useGenerationStore();
 
   const [topic, setTopic] = useState('');
   const [language, setLanguage] = useState<'zh-CN' | 'en-US'>('zh-CN');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!topic.trim()) return;
+    if (!topic.trim() || loading) return;
 
-    const params = new URLSearchParams({
-      topic: topic.trim(),
-      language,
-    });
+    setLoading(true);
+    setError(null);
 
-    router.push(`/generate?${params.toString()}`);
+    try {
+      // 先创建会话
+      const response = await fetch('/api/session/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topic.trim(), language }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to create session');
+      }
+
+      const session: GenerationSession = await response.json();
+
+      // 保存会话ID到本地
+      addSessionId(session.id);
+
+      // 跳转到生成页面（带上 session ID）
+      const params = new URLSearchParams({
+        topic: topic.trim(),
+        language,
+        session: session.id,
+      });
+      router.push(`/generate?${params.toString()}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message);
+      setLoading(false);
+    }
   };
 
   return (
@@ -108,15 +140,31 @@ export default function HomePage() {
                   </Select>
                 </div>
 
+                {/* 错误提示 */}
+                {error && (
+                  <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
+                    {error}
+                  </div>
+                )}
+
                 {/* 提交按钮 */}
                 <Button
                   type="submit"
                   size="lg"
                   className="h-12 w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-base font-medium shadow-lg shadow-blue-600/25 transition-all duration-200 hover:shadow-xl hover:shadow-blue-600/30"
-                  disabled={!topic.trim()}
+                  disabled={!topic.trim() || loading}
                 >
-                  <Sparkles className="mr-2 h-5 w-5" />
-                  开始生成
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      创建中...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="mr-2 h-5 w-5" />
+                      开始生成
+                    </>
+                  )}
                 </Button>
               </form>
             </div>

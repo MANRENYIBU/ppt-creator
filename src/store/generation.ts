@@ -81,23 +81,45 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
   },
 
   addSessionId: (id) => {
-    const { sessionIds } = get()
-    if (sessionIds.includes(id)) return
-    const newIds = [id, ...sessionIds]
-    set({ sessionIds: newIds })
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newIds))
+    if (typeof window === 'undefined') return
+
+    // 先从 localStorage 读取最新数据，避免覆盖已有的 IDs
+    // 这解决了在某些页面没有调用 loadSessionIds 时直接添加导致覆盖的问题
+    let currentIds: string[] = []
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        currentIds = JSON.parse(stored)
+      }
+    } catch {
+      // 解析失败，使用空数组
     }
+
+    if (currentIds.includes(id)) return
+    const newIds = [id, ...currentIds]
+    set({ sessionIds: newIds })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newIds))
   },
 
   removeSessionId: (id) => {
-    const { sessionIds, sessionCache } = get()
-    const newIds = sessionIds.filter((sid) => sid !== id)
+    if (typeof window === 'undefined') return
+
+    // 先从 localStorage 读取最新数据
+    let currentIds: string[] = []
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      if (stored) {
+        currentIds = JSON.parse(stored)
+      }
+    } catch {
+      // 解析失败，使用空数组
+    }
+
+    const { sessionCache } = get()
+    const newIds = currentIds.filter((sid) => sid !== id)
     sessionCache.delete(id)
     set({ sessionIds: newIds, sessionCache: new Map(sessionCache) })
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newIds))
-    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(newIds))
   },
 
   clearSessionIds: () => {
@@ -117,8 +139,10 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       const response = await fetch(`/api/session/${id}`)
       if (!response.ok) {
         if (response.status === 404) {
-          // 会话不存在，从ID列表中移除
-          get().removeSessionId(id)
+          // 会话不存在，但不自动从localStorage移除
+          // 用户可以通过历史页面的删除按钮手动清理
+          // 这避免了因服务器重启或临时问题导致意外丢失历史记录
+          console.warn(`Session ${id} not found on server`)
           return null
         }
         throw new Error('Failed to fetch session')
