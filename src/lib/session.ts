@@ -3,7 +3,22 @@ import path from 'path';
 import { GenerationSession, GenerationStage, ThemeName } from '@/types';
 
 // 会话存储目录
-const SESSIONS_DIR = path.join(process.cwd(), '.sessions');
+// Vercel 等无服务器环境只有 /tmp 可写
+// 本地开发使用 .sessions 目录
+function getSessionsDir(): string {
+  // 检测 Vercel 环境
+  if (process.env.VERCEL) {
+    return '/tmp/.sessions';
+  }
+  // 检测其他只读文件系统环境
+  if (process.env.SERVERLESS || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return '/tmp/.sessions';
+  }
+  // 本地开发环境
+  return path.join(process.cwd(), '.sessions');
+}
+
+const SESSIONS_DIR = getSessionsDir();
 
 // 确保目录存在
 async function ensureDir() {
