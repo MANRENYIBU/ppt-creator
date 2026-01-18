@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  ppt-creator:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - API_KEY=${API_KEY}
+      - BASE_URL=${BASE_URL:-}
+      - MODEL=${MODEL:-}
+      - TAVILY_API_KEY=${TAVILY_API_KEY:-}
+      - SERP_API_KEY=${SERP_API_KEY:-}
+    volumes:
+      - sessions:/app/.sessions
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  sessions:

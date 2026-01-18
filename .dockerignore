@@ -1,0 +1,39 @@
+# Dependencies
+node_modules
+npm-debug.log*
+
+# Next.js build
+.next
+out
+
+# Session data
+.sessions
+
+# Environment files (except example)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+.gitignore
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Claude
+.claude
+
+# Misc
+.DS_Store
+Thumbs.db

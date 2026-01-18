@@ -4,6 +4,7 @@
  */
 
 import PptxGenJS from 'pptxgenjs'
+import { codeToTokens, type BundledLanguage } from 'shiki'
 import type {
   PresentationDSL,
   SlideDSL,
@@ -187,6 +188,58 @@ const FONTS = {
   code: 'Consolas',
 }
 
+// ============ 代码高亮配置 ============
+
+// 支持的语言映射（将常见别名映射到 shiki 支持的语言）
+const LANGUAGE_MAP: Record<string, BundledLanguage> = {
+  js: 'javascript',
+  ts: 'typescript',
+  jsx: 'jsx',
+  tsx: 'tsx',
+  py: 'python',
+  rb: 'ruby',
+  rs: 'rust',
+  go: 'go',
+  java: 'java',
+  kt: 'kotlin',
+  cs: 'csharp',
+  cpp: 'cpp',
+  c: 'c',
+  sh: 'bash',
+  bash: 'bash',
+  shell: 'bash',
+  zsh: 'bash',
+  sql: 'sql',
+  html: 'html',
+  css: 'css',
+  scss: 'scss',
+  less: 'less',
+  json: 'json',
+  yaml: 'yaml',
+  yml: 'yaml',
+  xml: 'xml',
+  md: 'markdown',
+  markdown: 'markdown',
+  php: 'php',
+  swift: 'swift',
+  r: 'r',
+  scala: 'scala',
+  lua: 'lua',
+  perl: 'perl',
+  dockerfile: 'dockerfile',
+  docker: 'dockerfile',
+  graphql: 'graphql',
+  vue: 'vue',
+  svelte: 'svelte',
+}
+
+// 获取 shiki 支持的语言
+function getShikiLanguage(lang?: string): BundledLanguage | undefined {
+  if (!lang) return undefined
+  const lower = lang.toLowerCase()
+  return LANGUAGE_MAP[lower] || (lower as BundledLanguage)
+}
+
 // 布局配置（16:9，单位：英寸）
 const LAYOUT = {
   width: 10,
@@ -222,13 +275,13 @@ export class DSLRenderer {
   /**
    * 渲染完整演示文稿
    */
-  render(presentation: PresentationDSL, topic: string): PptxGenJS {
+  async render(presentation: PresentationDSL, topic: string): Promise<PptxGenJS> {
     this.pptx.author = 'AI PPT Creator'
     this.pptx.title = topic
     this.pptx.subject = topic
 
     for (const slideDSL of presentation.slides) {
-      this.renderSlide(slideDSL)
+      await this.renderSlide(slideDSL)
     }
 
     return this.pptx
@@ -245,7 +298,7 @@ export class DSLRenderer {
   /**
    * 渲染单张幻灯片
    */
-  private renderSlide(dsl: SlideDSL): void {
+  private async renderSlide(dsl: SlideDSL): Promise<void> {
     const slide = this.pptx.addSlide()
 
     // 根据布局类型选择渲染方法
@@ -257,16 +310,16 @@ export class DSLRenderer {
         this.renderSection(slide, dsl)
         break
       case 'title-content':
-        this.renderTitleContent(slide, dsl)
+        await this.renderTitleContent(slide, dsl)
         break
       case 'two-column':
-        this.renderTwoColumn(slide, dsl)
+        await this.renderTwoColumn(slide, dsl)
         break
       case 'comparison':
-        this.renderComparison(slide, dsl)
+        await this.renderComparison(slide, dsl)
         break
       default:
-        this.renderTitleContent(slide, dsl)
+        await this.renderTitleContent(slide, dsl)
     }
 
     // 添加演讲者备注
@@ -381,7 +434,7 @@ export class DSLRenderer {
   /**
    * 标题+内容布局（最常用）
    */
-  private renderTitleContent(slide: PptxGenJS.Slide, dsl: SlideDSL): void {
+  private async renderTitleContent(slide: PptxGenJS.Slide, dsl: SlideDSL): Promise<void> {
     slide.background = { color: this.theme.background }
 
     // 顶部装饰条
@@ -429,14 +482,14 @@ export class DSLRenderer {
         y: LAYOUT.contentStartY,
         w: LAYOUT.width - LAYOUT.margin * 2,
       }
-      this.renderContentBlocks(slide, dsl.content, pos)
+      await this.renderContentBlocks(slide, dsl.content, pos)
     }
   }
 
   /**
    * 双栏布局
    */
-  private renderTwoColumn(slide: PptxGenJS.Slide, dsl: SlideDSL): void {
+  private async renderTwoColumn(slide: PptxGenJS.Slide, dsl: SlideDSL): Promise<void> {
     slide.background = { color: this.theme.background }
 
     // 标题区域
@@ -452,7 +505,7 @@ export class DSLRenderer {
         y: LAYOUT.contentStartY,
         w: columnWidth,
       }
-      this.renderContentBlocks(slide, dsl.leftContent, leftPos)
+      await this.renderContentBlocks(slide, dsl.leftContent, leftPos)
     }
 
     // 右栏
@@ -462,14 +515,14 @@ export class DSLRenderer {
         y: LAYOUT.contentStartY,
         w: columnWidth,
       }
-      this.renderContentBlocks(slide, dsl.rightContent, rightPos)
+      await this.renderContentBlocks(slide, dsl.rightContent, rightPos)
     }
   }
 
   /**
    * 对比布局（类似双栏但有标签）
    */
-  private renderComparison(slide: PptxGenJS.Slide, dsl: SlideDSL): void {
+  private async renderComparison(slide: PptxGenJS.Slide, dsl: SlideDSL): Promise<void> {
     slide.background = { color: this.theme.background }
 
     // 标题
@@ -503,7 +556,7 @@ export class DSLRenderer {
         y: LAYOUT.contentStartY + 0.5,
         w: columnWidth,
       }
-      this.renderContentBlocks(slide, dsl.leftContent, leftPos)
+      await this.renderContentBlocks(slide, dsl.leftContent, leftPos)
     }
 
     // 右栏内容
@@ -513,7 +566,7 @@ export class DSLRenderer {
         y: LAYOUT.contentStartY + 0.5,
         w: columnWidth,
       }
-      this.renderContentBlocks(slide, dsl.rightContent, rightPos)
+      await this.renderContentBlocks(slide, dsl.rightContent, rightPos)
     }
   }
 
@@ -559,18 +612,18 @@ export class DSLRenderer {
   /**
    * 渲染多个内容块
    */
-  private renderContentBlocks(
+  private async renderContentBlocks(
     slide: PptxGenJS.Slide,
     blocks: ContentBlock[],
     startPos: Position,
-  ): void {
+  ): Promise<void> {
     let currentY = startPos.y
 
     for (const block of blocks) {
       // 防止溢出
       if (currentY > LAYOUT.contentEndY) break
 
-      const height = this.renderContentBlock(slide, block, {
+      const height = await this.renderContentBlock(slide, block, {
         ...startPos,
         y: currentY,
       })
@@ -582,11 +635,11 @@ export class DSLRenderer {
   /**
    * 渲染单个内容块
    */
-  private renderContentBlock(
+  private async renderContentBlock(
     slide: PptxGenJS.Slide,
     block: ContentBlock,
     pos: Position,
-  ): number {
+  ): Promise<number> {
     switch (block.type) {
       case 'paragraph':
         return this.renderParagraph(slide, block, pos)
@@ -595,7 +648,7 @@ export class DSLRenderer {
       case 'numbered':
         return this.renderNumbered(slide, block, pos)
       case 'code':
-        return this.renderCode(slide, block, pos)
+        return await this.renderCode(slide, block, pos)
       case 'table':
         return this.renderTable(slide, block, pos)
       case 'quote':
@@ -721,17 +774,20 @@ export class DSLRenderer {
   }
 
   /**
-   * 渲染代码块
+   * 渲染代码块（使用 shiki 语法高亮）
    */
-  private renderCode(
+  private async renderCode(
     slide: PptxGenJS.Slide,
     block: CodeBlock,
     pos: Position,
-  ): number {
-    const lineHeight = 0.16 // 减小行高以容纳更多行
+  ): Promise<number> {
+    const lineHeight = 0.16
     const padding = 0.12
     const height = block.lines.length * lineHeight + padding * 2
-    const maxHeight = 3.5 // 增加最大高度
+    const maxHeight = 3.5
+
+    // 深色背景更适合语法高亮
+    const codeBackground = '1E1E1E' // VS Code 暗色主题背景
 
     // 背景
     slide.addShape('rect', {
@@ -739,8 +795,8 @@ export class DSLRenderer {
       y: pos.y,
       w: pos.w,
       h: Math.min(height, maxHeight),
-      fill: { color: this.theme.backgroundCode },
-      line: { color: this.theme.border, width: 0.5 },
+      fill: { color: codeBackground },
+      line: { color: '3C3C3C', width: 0.5 },
     })
 
     // 语言标签
@@ -751,24 +807,71 @@ export class DSLRenderer {
         w: 0.7,
         h: 0.18,
         fontSize: 7,
-        color: this.theme.textMuted,
+        color: '808080',
         fontFace: FONTS.code,
         align: 'right',
       })
     }
 
-    // 代码内容
+    // 代码内容（使用 shiki 高亮）
     const code = block.lines.join('\n')
-    slide.addText(code, {
-      x: pos.x + padding,
-      y: pos.y + padding,
-      w: pos.w - padding * 2,
-      h: Math.min(height - padding * 2, maxHeight - padding * 2),
-      fontSize: 8, // 减小字体
-      color: this.theme.text,
-      fontFace: FONTS.code,
-      valign: 'top',
-    })
+    const shikiLang = getShikiLanguage(block.language)
+
+    try {
+      // 使用 shiki 进行语法高亮
+      const { tokens } = await codeToTokens(code, {
+        lang: shikiLang || 'text',
+        theme: 'one-dark-pro',
+      })
+
+      // 将 shiki tokens 转换为 PptxGenJS 格式
+      const textParts: PptxGenJS.TextProps[] = []
+
+      tokens.forEach((lineTokens, lineIndex) => {
+        lineTokens.forEach((token) => {
+          // 转换颜色格式：#RRGGBB -> RRGGBB
+          const color = token.color?.replace('#', '') || 'D4D4D4'
+          textParts.push({
+            text: token.content,
+            options: {
+              color,
+              fontSize: 8,
+              fontFace: FONTS.code,
+            },
+          })
+        })
+        // 添加换行（除了最后一行）
+        if (lineIndex < tokens.length - 1) {
+          textParts.push({
+            text: '\n',
+            options: {
+              fontSize: 8,
+              fontFace: FONTS.code,
+            },
+          })
+        }
+      })
+
+      slide.addText(textParts, {
+        x: pos.x + padding,
+        y: pos.y + padding,
+        w: pos.w - padding * 2,
+        h: Math.min(height - padding * 2, maxHeight - padding * 2),
+        valign: 'top',
+      })
+    } catch {
+      // 如果 shiki 失败，回退到纯文本渲染
+      slide.addText(code, {
+        x: pos.x + padding,
+        y: pos.y + padding,
+        w: pos.w - padding * 2,
+        h: Math.min(height - padding * 2, maxHeight - padding * 2),
+        fontSize: 8,
+        color: 'D4D4D4',
+        fontFace: FONTS.code,
+        valign: 'top',
+      })
+    }
 
     // 标题（如果有）
     if (block.caption) {
@@ -944,6 +1047,6 @@ export async function generatePPTXFromDSL(
   theme?: ThemeName,
 ): Promise<string> {
   const renderer = new DSLRenderer(theme)
-  renderer.render(presentation, topic)
+  await renderer.render(presentation, topic)
   return renderer.export()
 }
