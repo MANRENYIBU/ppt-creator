@@ -331,6 +331,24 @@ TAVILY_API_KEY=tvly-xxx
 - Pro 版本可延长至 60 秒
 - PPT 生成可能需要较长时间，建议使用 Pro 版本或自建服务器
 
+#### ⚠️ 重要：Vercel 无服务器环境限制
+
+Vercel 的 Serverless Functions 运行在**只读文件系统**中，只有 `/tmp` 目录可写。本项目已自动适配：
+
+- **检测环境**: 代码会自动检测 `VERCEL` 环境变量
+- **存储位置**: 在 Vercel 上会话存储在 `/tmp/.sessions`
+- **数据持久性**: `/tmp` 目录在函数冷启动时会被清空
+
+**这意味着在 Vercel 上：**
+1. 会话数据是**临时的**，可能在函数冷启动后丢失
+2. 用户需要在同一个"热"实例期间完成整个生成流程
+3. 历史记录功能可能不稳定
+
+**如果需要持久化存储，建议：**
+- 使用 Vercel KV（Redis）或 Vercel Postgres
+- 使用外部数据库（如 Supabase、PlanetScale）
+- 使用 Railway 等支持持久存储的平台
+
 ---
 
 ### Railway 部署
@@ -564,6 +582,20 @@ npm install shiki
 - 开发环境使用 `.env.local`
 - 生产环境需要在部署平台配置
 - Docker 使用 `-e` 参数或 `docker-compose.yml` 中的 `environment`
+
+### 8. Vercel 报错 ENOENT: no such file or directory
+
+错误信息类似：
+```
+ENOENT: no such file or directory, open '/var/task/.sessions/xxx.json'
+```
+
+**原因**: Vercel Serverless Functions 的文件系统是只读的，无法写入 `.sessions` 目录。
+
+**解决方案**:
+- 确保使用最新代码，已自动适配使用 `/tmp/.sessions`
+- 如果仍然报错，检查是否部署了旧版本代码
+- 重新部署：`vercel --prod --force`
 
 ---
 

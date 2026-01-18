@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession, updateSession, updateSessionStage } from '@/lib/session'
 import { generateDSLPresentation } from '@/lib/dsl-generator'
 
+// Vercel 函数超时（秒），Pro 版有效，content 生成最耗时
+export const maxDuration = 120
+
 export async function POST(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },

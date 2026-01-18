@@ -36,6 +36,10 @@ const STAGES: StageConfig[] = [
   { key: 'exporting', label: '导出文件', labelEn: 'Exporting File', icon: Download, endpoint: 'export' },
 ];
 
+// 轮询配置
+const POLL_INTERVAL = 2000; // 2秒轮询一次
+const MAX_POLL_TIME = 300000; // 最大轮询时间 5 分钟
+
 function GenerateContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -53,6 +57,25 @@ function GenerateContent() {
   const [error, setError] = useState<string | null>(null);
   const [currentStageIndex, setCurrentStageIndex] = useState(-1);
   const hasInitialized = useRef(false);
+  const pollingRef = useRef<NodeJS.Timeout | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  // 清理轮询
+  const stopPolling = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, []);
+
+  // 组件卸载时清理
+  useEffect(() => {
+    return () => stopPolling();
+  }, [stopPolling]);
 
   // 计算进度
   const getProgress = useCallback(() => {
@@ -63,6 +86,35 @@ function GenerateContent() {
     if (stageIndex === -1) return 0;
     return Math.min(95, (stageIndex + 1) * 25);
   }, [session]);
+
+  // 检查阶段是否完成
+  const isStageCompleted = useCallback((s: GenerationSession, stageKey: GenerationStage): boolean => {
+    switch (stageKey) {
+      case 'collecting':
+        return !!s.resources;
+      case 'outlining':
+        return !!(s.outline && s.outline.length > 0);
+      case 'generating':
+        return !!(s.dslPresentation && s.dslPresentation.slides?.length > 0);
+      case 'exporting':
+        return s.stage === 'completed';
+      default:
+        return false;
+    }
+  }, []);
+
+  // 获取会话状态（用于轮询）
+  const pollSession = useCallback(async (id: string): Promise<GenerationSession | null> => {
+    try {
+      const response = await fetch(`/api/session/${id}`);
+      if (!response.ok) {
+        return null;
+      }
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }, []);
 
   // 创建会话
   const createSession = useCallback(async () => {
@@ -122,33 +174,140 @@ function GenerateContent() {
     }
   }, [createSession]);
 
+  // 启动阶段并轮询等待完成
+  const executeStageWithPolling = useCallback(async (
+    sessionId: string,
+    stageIndex: number
+  ): Promise<GenerationSession | null> => {
+    const stage = STAGES[stageIndex];
+    if (!stage) return null;
+
+    setCurrentStageIndex(stageIndex);
+
+    // 创建 AbortController 用于取消请求
+    abortControllerRef.current = new AbortController();
+
+    // 发起 POST 请求启动任务（不等待完成）
+    const startTask = async () => {
+      try {
+        const response = await fetch(`/api/session/${sessionId}/${stage.endpoint}`, {
+          method: 'POST',
+          signal: abortControllerRef.current?.signal,
+        });
+
+        if (response.ok) {
+          // 如果请求成功完成，直接返回结果
+          const data = await response.json();
+          return data as GenerationSession;
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.error || `Failed at ${stage.labelEn}`);
+        }
+      } catch (err) {
+        // 如果是超时或网络错误，返回 null（将通过轮询检查状态）
+        if (err instanceof Error && err.name === 'AbortError') {
+          return null;
+        }
+        // 检查是否是 fetch 失败（可能是超时）
+        if (err instanceof TypeError && err.message.includes('fetch')) {
+          return null;
+        }
+        throw err;
+      }
+    };
+
+    // 轮询等待任务完成
+    const pollUntilComplete = (): Promise<GenerationSession | null> => {
+      return new Promise((resolve, reject) => {
+        const startTime = Date.now();
+
+        const checkStatus = async () => {
+          // 检查是否超时
+          if (Date.now() - startTime > MAX_POLL_TIME) {
+            stopPolling();
+            reject(new Error(isZh ? '处理超时，请重试' : 'Processing timeout, please retry'));
+            return;
+          }
+
+          const currentSession = await pollSession(sessionId);
+
+          if (!currentSession) {
+            // 获取失败，继续轮询
+            return;
+          }
+
+          // 检查是否出错
+          if (currentSession.stage === 'error') {
+            stopPolling();
+            reject(new Error(currentSession.error || 'Processing failed'));
+            return;
+          }
+
+          // 检查阶段是否完成
+          if (isStageCompleted(currentSession, stage.key)) {
+            stopPolling();
+            resolve(currentSession);
+            return;
+          }
+        };
+
+        // 立即检查一次
+        checkStatus();
+
+        // 设置轮询间隔
+        pollingRef.current = setInterval(checkStatus, POLL_INTERVAL);
+      });
+    };
+
+    try {
+      // 同时启动任务和轮询
+      // 使用 Promise.race：如果 POST 请求成功返回，直接使用结果
+      // 如果 POST 请求超时/失败，继续轮询等待
+      const result = await Promise.race([
+        startTask(),
+        // 延迟开始轮询，给 POST 请求一些时间
+        new Promise<GenerationSession | null>((resolve) => {
+          setTimeout(async () => {
+            try {
+              const polledResult = await pollUntilComplete();
+              resolve(polledResult);
+            } catch (err) {
+              resolve(null);
+            }
+          }, 3000); // 3秒后开始轮询
+        }),
+      ]);
+
+      if (result) {
+        stopPolling();
+        return result;
+      }
+
+      // 如果 startTask 失败但没抛出异常，等待轮询结果
+      return await pollUntilComplete();
+    } catch (err) {
+      stopPolling();
+      throw err;
+    }
+  }, [isZh, isStageCompleted, pollSession, stopPolling]);
+
   // 执行某个阶段
   const executeStage = useCallback(async (stageIndex: number) => {
     if (!session) return;
 
-    const stage = STAGES[stageIndex];
-    if (!stage) return;
-
     setLoading(true);
     setError(null);
-    setCurrentStageIndex(stageIndex);
 
     try {
-      const response = await fetch(`/api/session/${session.id}/${stage.endpoint}`, {
-        method: 'POST',
-      });
+      const updatedSession = await executeStageWithPolling(session.id, stageIndex);
 
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || `Failed at ${stage.labelEn}`);
-      }
+      if (updatedSession) {
+        setSession(updatedSession);
 
-      const updatedSession: GenerationSession = await response.json();
-      setSession(updatedSession);
-
-      // 如果完成，保存会话ID并跳转到结果页
-      if (updatedSession.stage === 'completed') {
-        addSessionId(updatedSession.id);
+        // 如果完成，保存会话ID
+        if (updatedSession.stage === 'completed') {
+          addSessionId(updatedSession.id);
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
@@ -157,55 +316,51 @@ function GenerateContent() {
       setLoading(false);
       setCurrentStageIndex(-1);
     }
-  }, [session, addSessionId]);
+  }, [session, executeStageWithPolling, addSessionId]);
 
   // 自动执行所有阶段
   const executeAll = useCallback(async () => {
+    if (!session) return;
+
+    setLoading(true);
+    setError(null);
+
     let currentSession = session;
 
-    for (let i = 0; i < STAGES.length; i++) {
-      if (!currentSession) break;
+    try {
+      for (let i = 0; i < STAGES.length; i++) {
+        const stage = STAGES[i];
 
-      // 检查是否已经完成此阶段
-      const stage = STAGES[i];
-      const shouldSkip =
-        (stage.key === 'collecting' && currentSession.resources) ||
-        (stage.key === 'outlining' && currentSession.outline?.length) ||
-        (stage.key === 'generating' && currentSession.dslPresentation?.slides?.length) ||
-        (stage.key === 'exporting' && currentSession.stage === 'completed');
-
-      if (shouldSkip) continue;
-
-      setLoading(true);
-      setCurrentStageIndex(i);
-
-      try {
-        const response = await fetch(`/api/session/${currentSession.id}/${stage.endpoint}`, {
-          method: 'POST',
-        });
-
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || `Failed at ${stage.labelEn}`);
+        // 检查是否已经完成此阶段
+        if (isStageCompleted(currentSession, stage.key)) {
+          continue;
         }
 
-        currentSession = await response.json();
+        setCurrentStageIndex(i);
+
+        const updatedSession = await executeStageWithPolling(currentSession.id, i);
+
+        if (!updatedSession) {
+          throw new Error(`Failed at ${stage.labelEn}`);
+        }
+
+        currentSession = updatedSession;
         setSession(currentSession);
 
-        if (currentSession && currentSession.stage === 'completed') {
+        // 如果完成，保存会话ID并退出循环
+        if (currentSession.stage === 'completed') {
           addSessionId(currentSession.id);
           break;
         }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : 'Unknown error';
-        setError(message);
-        break;
       }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(message);
+    } finally {
+      setLoading(false);
+      setCurrentStageIndex(-1);
     }
-
-    setLoading(false);
-    setCurrentStageIndex(-1);
-  }, [session, addSessionId]);
+  }, [session, isStageCompleted, executeStageWithPolling, addSessionId]);
 
   // 初始化
   useEffect(() => {
@@ -240,13 +395,7 @@ function GenerateContent() {
     const stage = STAGES[stageIndex];
 
     // 检查是否已完成
-    const isCompleted =
-      (stage.key === 'collecting' && session.resources) ||
-      (stage.key === 'outlining' && session.outline?.length) ||
-      (stage.key === 'generating' && session.dslPresentation?.slides?.length) ||
-      (stage.key === 'exporting' && session.stage === 'completed');
-
-    if (isCompleted) return 'completed';
+    if (isStageCompleted(session, stage.key)) return 'completed';
     if (currentStageIndex === stageIndex && loading) return 'loading';
     if (session.stage === stage.key) return 'current';
     return 'pending';
