@@ -32,7 +32,7 @@ const THEMES: { name: ThemeName; label: string; labelEn: string; color: string }
 function ResultContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { fetchSession, addSessionId } = useGenerationStore()
+  const { fetchSessionFresh, addSessionId } = useGenerationStore()
 
   const sessionId = searchParams.get('id')
   const [session, setSession] = useState<GenerationSession | null>(null)
@@ -48,7 +48,8 @@ function ResultContent() {
       }
 
       setLoading(true)
-      const fetchedSession = await fetchSession(sessionId)
+      // 强制从服务器获取最新数据，跳过缓存（因为 generate 页面可能有旧缓存）
+      const fetchedSession = await fetchSessionFresh(sessionId)
 
       if (!fetchedSession) {
         router.replace('/')
@@ -66,7 +67,7 @@ function ResultContent() {
     }
 
     loadSession()
-  }, [sessionId, fetchSession, addSessionId, router])
+  }, [sessionId, fetchSessionFresh, addSessionId, router])
 
   if (loading || !session) {
     return (

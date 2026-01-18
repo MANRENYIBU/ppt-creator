@@ -29,6 +29,7 @@ interface GenerationState {
 
   // 会话数据操作
   fetchSession: (id: string) => Promise<GenerationSession | null>
+  fetchSessionFresh: (id: string) => Promise<GenerationSession | null>
   fetchAllSessions: () => Promise<GenerationSession[]>
   cacheSession: (session: GenerationSession) => void
   getCachedSession: (id: string) => GenerationSession | undefined
@@ -152,6 +153,27 @@ export const useGenerationStore = create<GenerationState>((set, get) => ({
       return session
     } catch (error) {
       console.error('Failed to fetch session:', error)
+      return null
+    }
+  },
+
+  fetchSessionFresh: async (id) => {
+    // 强制从服务器获取最新数据，跳过缓存
+    try {
+      const response = await fetch(`/api/session/${id}`)
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.warn(`Session ${id} not found on server`)
+          return null
+        }
+        throw new Error('Failed to fetch session')
+      }
+      const session: GenerationSession = await response.json()
+      const { cacheSession } = get()
+      cacheSession(session)  // 更新缓存
+      return session
+    } catch (error) {
+      console.error('Failed to fetch session fresh:', error)
       return null
     }
   },

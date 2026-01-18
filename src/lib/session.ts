@@ -11,7 +11,11 @@ function getSessionsDir(): string {
     return '/tmp/.sessions';
   }
   // 检测其他只读文件系统环境
-  if (process.env.SERVERLESS || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  if (process.env.SERVERLESS || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.EDGE) {
+    return '/tmp/.sessions';
+  }
+  // EdgeOne 等边缘计算环境
+  if (process.env.EDGE_RUNTIME || process.env.TENCLOUD) {
     return '/tmp/.sessions';
   }
   // 本地开发环境
@@ -24,8 +28,8 @@ const SESSIONS_DIR = getSessionsDir();
 async function ensureDir() {
   try {
     await fs.mkdir(SESSIONS_DIR, { recursive: true });
-  } catch {
-    // 目录已存在
+  } catch (error) {
+    console.error('Failed to create sessions directory:', SESSIONS_DIR, error);
   }
 }
 
@@ -55,11 +59,17 @@ export async function createSession(
     updatedAt: new Date().toISOString(),
   };
 
-  await fs.writeFile(
-    getSessionPath(id),
-    JSON.stringify(session, null, 2),
-    'utf-8'
-  );
+  try {
+    await fs.writeFile(
+      getSessionPath(id),
+      JSON.stringify(session, null, 2),
+      'utf-8'
+    );
+    console.log('Session created:', id, 'at', getSessionPath(id));
+  } catch (error) {
+    console.error('Failed to write session file:', id, error);
+    throw new Error('Failed to persist session. File system may be read-only.');
+  }
 
   return session;
 }
@@ -70,8 +80,13 @@ export async function createSession(
 export async function getSession(id: string): Promise<GenerationSession | null> {
   try {
     const content = await fs.readFile(getSessionPath(id), 'utf-8');
+    if (!content || content.trim() === '') {
+      console.error('Session file is empty:', id);
+      return null;
+    }
     return JSON.parse(content) as GenerationSession;
-  } catch {
+  } catch (error) {
+    console.error('Failed to read session:', id, error);
     return null;
   }
 }

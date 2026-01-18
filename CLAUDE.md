@@ -55,8 +55,18 @@ The frontend uses a polling-based approach for reliability:
    - `collecting` → `outlining` (generate outline)
    - `outlining` → `generating` (generate DSL slides)
    - `generating` → `completed`
-4. Frontend polls every 2s, triggers generate API when stage changes
+4. Frontend polls every 5s, triggers generate API when stage changes
 5. On completion, redirects to result page for theme selection and export
+6. Max polling duration: 60 minutes
+
+**API Timeout Configuration:**
+| Endpoint | Timeout | Purpose |
+|----------|---------|---------|
+| `POST /api/session/[id]/generate` | 120s | Full generation pipeline |
+| `POST /api/session/[id]/content` | 120s | DSL slide generation |
+| `POST /api/session/[id]/collect` | 60s | Resource collection |
+| `POST /api/session/[id]/outline` | 60s | Outline generation |
+| `POST /api/session/[id]/export` | 60s | PPTX export |
 
 ### AI-Driven Resource Collection
 
@@ -206,6 +216,17 @@ AI-generated slides are validated before acceptance:
 | `src/types/slide-dsl.ts` | DSL type definitions and content limits |
 | `src/types/index.ts` | Session, outline, resource type definitions |
 
+### UI Components
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| `Header` | `components/header.tsx` | Navigation bar with logo and history link |
+| `Button` | `components/ui/button.tsx` | Button with variants (default, destructive, outline, secondary, ghost, link) and sizes |
+| `Input` | `components/ui/input.tsx` | Text input field |
+| `Select` | `components/ui/select.tsx` | Dropdown selection (language, theme) |
+| `Card` | `components/ui/card.tsx` | Card container for content grouping |
+| `Progress` | `components/ui/progress.tsx` | Progress indicator for generation stages |
+
 ### Routes
 
 | Route | Purpose |
@@ -309,6 +330,12 @@ Each theme defines these color properties:
 | `accent` | Success/highlight states |
 | `quote` | Quote block accent |
 
+### Typography & Code Highlighting
+
+- **Fonts**: Inter (UI), Microsoft YaHei (Chinese titles/body), Consolas (code)
+- **Code Syntax Highlighting**: shiki 3.21.0 with `one-dark-pro` theme
+- **Supported Languages**: 30+ languages via `LANGUAGE_MAP` (javascript, python, rust, go, etc.)
+
 ### Layout Constants (LAYOUT)
 
 - **Slide dimensions**: 10 x 5.625 inches (16:9 aspect ratio)
@@ -375,3 +402,26 @@ This project includes Claude skills in `.claude/skills/`:
 
 - **ui-ux-pro-max**: Design intelligence for UI/UX decisions
 - **vercel-react-best-practices**: React/Next.js performance patterns
+
+## Deployment
+
+### Docker Support
+
+- **Dockerfile** and **docker-compose.yml** included
+- Session storage adapts to serverless environments (`/tmp/.sessions`)
+- Build: `docker build -t ppt-creator .`
+- Run: `docker compose up`
+
+## Key Dependencies
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `next` | 16.1.2 | React 19.2.3 compatible |
+| `pptxgenjs` | 4.0.1 | PPTX generation |
+| `shiki` | 3.21.0 | Code syntax highlighting |
+| `openai` | 6.16.0 | OpenAI SDK |
+| `@anthropic-ai/sdk` | 0.71.2 | Anthropic SDK |
+| `zod` | 4.3.5 | Schema validation |
+| `zustand` | 5.0.10 | State management |
+| `lucide-react` | 0.562.0 | Icon library |
+| `tailwindcss` | 4.x | CSS framework |
