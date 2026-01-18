@@ -167,34 +167,15 @@ function GenerateContent() {
     [],
   )
 
-  // 开始生成流程
-  const startGeneration = useCallback(async () => {
-    if (!sessionId || isGenerating) return
+  // 轮询逻辑（抽取为独立函数，方便复用）
+  const startPolling = useCallback(() => {
+    if (pollingRef.current) return // 已在轮询中
 
-    setIsGenerating(true)
-    setError(null)
-    startTimeRef.current = Date.now()
-
-    // 立即调用一次 generate API 启动处理
-    const initialSession = await callGenerateAPI()
-    if (initialSession) {
-      setSession(initialSession)
-
-      // 如果已完成，不需要轮询
-      if (initialSession.stage === 'completed') {
-        setIsGenerating(false)
-        return
-      }
-
-      // 如果出错，停止
-      if (initialSession.stage === 'error') {
-        setError(initialSession.error || 'Generation failed')
-        setIsGenerating(false)
-        return
-      }
+    // 确保开始时间已设置
+    if (startTimeRef.current === 0) {
+      startTimeRef.current = Date.now()
     }
 
-    // 开始轮询
     pollingRef.current = setInterval(async () => {
       // 检查超时
       if (Date.now() - startTimeRef.current > MAX_POLL_TIME) {
@@ -229,9 +210,40 @@ function GenerateContent() {
         return
       }
     }, POLL_INTERVAL)
-  }, [sessionId, isGenerating, callGenerateAPI, cleanup, isZh])
+  }, [callGenerateAPI, cleanup, isZh])
 
-  // 初始化：获取 session 状态
+  // 开始生成流程
+  const startGeneration = useCallback(async () => {
+    if (!sessionId || isGenerating) return
+
+    setIsGenerating(true)
+    setError(null)
+    startTimeRef.current = Date.now()
+
+    // 立即调用一次 generate API 启动处理
+    const initialSession = await callGenerateAPI()
+    if (initialSession) {
+      setSession(initialSession)
+
+      // 如果已完成，不需要轮询
+      if (initialSession.stage === 'completed') {
+        setIsGenerating(false)
+        return
+      }
+
+      // 如果出错，停止
+      if (initialSession.stage === 'error') {
+        setError(initialSession.error || 'Generation failed')
+        setIsGenerating(false)
+        return
+      }
+    }
+
+    // 开始轮询
+    startPolling()
+  }, [sessionId, isGenerating, callGenerateAPI, isZh, startPolling])
+
+  // 初始化：获取 session 状态并自动开始轮询
   useEffect(() => {
     if (!topic || !sessionId) {
       router.replace('/')
@@ -254,9 +266,18 @@ function GenerateContent() {
         }
         const s: GenerateResponse = await response.json()
         setSession(s)
+
         // 如果已完成，直接跳转到结果页
         if (s.stage === 'completed') {
           router.replace(`/result?id=${s.id}`)
+          return
+        }
+
+        // 如果正在处理中或处于某个阶段，直接开始轮询
+        if (s.processing || (s.stage !== 'idle' && s.stage !== 'error')) {
+          setIsGenerating(true)
+          startTimeRef.current = Date.now()
+          startPolling()
         }
       } catch {
         router.replace('/')
@@ -264,7 +285,7 @@ function GenerateContent() {
     }
 
     fetchInitialSession()
-  }, [topic, sessionId, router])
+  }, [topic, sessionId, router, startPolling])
 
   // 跳转到结果页
   useEffect(() => {
@@ -443,28 +464,9 @@ function GenerateContent() {
                     <PlayCircle className="h-4 w-4" />
                     {isZh ? '重试' : 'Retry'}
                   </Button>
-                ) : isGenerating ? (
-                  <Button className="flex-1 gap-2" disabled>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {isZh ? '生成中...' : 'Generating...'}
-                  </Button>
-                ) : isComplete ? (
-                  <Button className="flex-1 gap-2" disabled>
-                    <CheckCircle2 className="h-4 w-4" />
-                    {isZh ? '已完成' : 'Completed'}
-                  </Button>
                 ) : (
-                  <Button className="flex-1 gap-2" onClick={startGeneration}>
-                    <PlayCircle className="h-4 w-4" />
-                    {isZh ? '开始生成' : 'Start Generation'}
-                  </Button>
+                  <></>
                 )}
-                <Button
-                  variant="outline"
-                  onClick={() => router.push('/')}
-                  disabled={isGenerating}>
-                  {isZh ? '返回' : 'Back'}
-                </Button>
               </div>
 
               {/* 资料预览 */}
