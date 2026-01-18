@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   Download,
   Trash2,
@@ -18,12 +19,12 @@ import { useGenerationStore } from '@/store/generation'
 import { GenerationSession } from '@/types'
 
 export default function HistoryPage() {
+  const router = useRouter()
   const { sessionIds, loadSessionIds, removeSessionId, fetchAllSessions } =
     useGenerationStore()
 
   const [sessions, setSessions] = useState<GenerationSession[]>([])
   const [loading, setLoading] = useState(true)
-  const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
   // 加载会话ID列表
   useEffect(() => {
@@ -53,32 +54,9 @@ export default function HistoryPage() {
     loadSessions()
   }, [sessionIds, fetchAllSessions])
 
-  const handleDownload = async (sessionId: string, topic: string) => {
-    setDownloadingId(sessionId)
-    try {
-      const response = await fetch(`/api/session/${sessionId}/export`, {
-        method: 'POST',
-      })
-
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.error || 'Export failed')
-      }
-
-      const result = await response.json()
-
-      if (result.downloadUrl) {
-        const link = document.createElement('a')
-        link.href = result.downloadUrl
-        link.download = `${topic}.pptx`
-        link.click()
-      }
-    } catch (error) {
-      console.error('Download failed:', error)
-      alert('下载失败，请重试')
-    } finally {
-      setDownloadingId(null)
-    }
+  const handleDownload = (sessionId: string) => {
+    // 跳转到结果页，用户可以选择主题后下载
+    router.push(`/result?id=${sessionId}`)
   }
 
   const handleRemove = (id: string) => {
@@ -196,7 +174,6 @@ export default function HistoryPage() {
               const isZh = session.language === 'zh-CN'
               const isCompleted = session.stage === 'completed'
               const canDownload = !!session.dslPresentation?.slides?.length
-              const isDownloading = downloadingId === session.id
 
               return (
                 <div
@@ -273,18 +250,11 @@ export default function HistoryPage() {
                           variant="outline"
                           size="sm"
                           className="border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
-                          onClick={() =>
-                            handleDownload(session.id, session.topic)
-                          }
-                          disabled={isDownloading}
+                          onClick={() => handleDownload(session.id)}
                         >
-                          {isDownloading ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Download className="h-4 w-4" />
-                          )}
+                          <Download className="h-4 w-4" />
                           <span className="ml-1.5 hidden sm:inline">
-                            {isDownloading ? '生成中' : '下载'}
+                            下载
                           </span>
                         </Button>
                       )}

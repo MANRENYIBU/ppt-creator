@@ -8,7 +8,6 @@ import type {
   PresentationDSL,
   SlideDSL,
   ContentBlock,
-  SlideLayout,
   CodeBlock,
   TableBlock,
   QuoteBlock,
@@ -17,21 +16,169 @@ import type {
   NumberedBlock,
 } from '@/types/slide-dsl'
 
+// ============ 主题类型定义 ============
+
+export type ThemeName =
+  | 'blue'
+  | 'green'
+  | 'purple'
+  | 'orange'
+  | 'red'
+  | 'slate'
+  | 'teal'
+  | 'rose'
+
+export interface ThemeColors {
+  primary: string
+  primaryDark: string
+  secondary: string
+  text: string
+  textMuted: string
+  textLight: string
+  background: string
+  backgroundAlt: string
+  backgroundCode: string
+  border: string
+  accent: string
+  quote: string
+}
+
 // ============ 主题配置 ============
 
-const THEME = {
-  primary: '2563EB',       // blue-600
-  primaryDark: '1D4ED8',   // blue-700
-  secondary: '6366F1',     // indigo-500
-  text: '1F2937',          // gray-800
-  textMuted: '6B7280',     // gray-500
-  textLight: '9CA3AF',     // gray-400
-  background: 'FFFFFF',
-  backgroundAlt: 'F9FAFB', // gray-50
-  backgroundCode: 'F3F4F6', // gray-100
-  border: 'E5E7EB',        // gray-200
-  accent: '10B981',        // emerald-500
-  quote: 'F59E0B',         // amber-500
+const THEMES: Record<ThemeName, ThemeColors> = {
+  // 蓝色主题 - 专业商务（默认）
+  blue: {
+    primary: '2563EB', // blue-600
+    primaryDark: '1D4ED8', // blue-700
+    secondary: '6366F1', // indigo-500
+    text: '1F2937', // gray-800
+    textMuted: '6B7280', // gray-500
+    textLight: '9CA3AF', // gray-400
+    background: 'FFFFFF',
+    backgroundAlt: 'EFF6FF', // blue-50
+    backgroundCode: 'F3F4F6', // gray-100
+    border: 'DBEAFE', // blue-100
+    accent: '10B981', // emerald-500
+    quote: '3B82F6', // blue-500
+  },
+  // 绿色主题 - 自然清新
+  green: {
+    primary: '16A34A', // green-600
+    primaryDark: '15803D', // green-700
+    secondary: '22C55E', // green-500
+    text: '1F2937',
+    textMuted: '6B7280',
+    textLight: '9CA3AF',
+    background: 'FFFFFF',
+    backgroundAlt: 'F0FDF4', // green-50
+    backgroundCode: 'F3F4F6',
+    border: 'DCFCE7', // green-100
+    accent: '0D9488', // teal-600
+    quote: '22C55E', // green-500
+  },
+  // 青色主题 - 科技现代
+  teal: {
+    primary: '0D9488', // teal-600
+    primaryDark: '0F766E', // teal-700
+    secondary: '14B8A6', // teal-500
+    text: '1F2937',
+    textMuted: '6B7280',
+    textLight: '9CA3AF',
+    background: 'FFFFFF',
+    backgroundAlt: 'F0FDFA', // teal-50
+    backgroundCode: 'F3F4F6',
+    border: 'CCFBF1', // teal-100
+    accent: '06B6D4', // cyan-500
+    quote: '14B8A6', // teal-500
+  },
+  // 紫色主题 - 创意优雅
+  purple: {
+    primary: '9333EA', // purple-600
+    primaryDark: '7E22CE', // purple-700
+    secondary: 'A855F7', // purple-500
+    text: '1F2937',
+    textMuted: '6B7280',
+    textLight: '9CA3AF',
+    background: 'FFFFFF',
+    backgroundAlt: 'FAF5FF', // purple-50
+    backgroundCode: 'F3F4F6',
+    border: 'F3E8FF', // purple-100
+    accent: 'EC4899', // pink-500
+    quote: 'A855F7', // purple-500
+  },
+  // 橙色主题 - 活力热情
+  orange: {
+    primary: 'EA580C', // orange-600
+    primaryDark: 'C2410C', // orange-700
+    secondary: 'F97316', // orange-500
+    text: '1F2937',
+    textMuted: '6B7280',
+    textLight: '9CA3AF',
+    background: 'FFFFFF',
+    backgroundAlt: 'FFF7ED', // orange-50
+    backgroundCode: 'F3F4F6',
+    border: 'FFEDD5', // orange-100
+    accent: 'FBBF24', // amber-400
+    quote: 'F97316', // orange-500
+  },
+  // 红色主题 - 大胆醒目
+  red: {
+    primary: 'DC2626', // red-600
+    primaryDark: 'B91C1C', // red-700
+    secondary: 'EF4444', // red-500
+    text: '1F2937',
+    textMuted: '6B7280',
+    textLight: '9CA3AF',
+    background: 'FFFFFF',
+    backgroundAlt: 'FEF2F2', // red-50
+    backgroundCode: 'F3F4F6',
+    border: 'FEE2E2', // red-100
+    accent: 'F59E0B', // amber-500
+    quote: 'EF4444', // red-500
+  },
+  // 玫瑰主题 - 温暖柔和
+  rose: {
+    primary: 'E11D48', // rose-600
+    primaryDark: 'BE123C', // rose-700
+    secondary: 'F43F5E', // rose-500
+    text: '1F2937',
+    textMuted: '6B7280',
+    textLight: '9CA3AF',
+    background: 'FFFFFF',
+    backgroundAlt: 'FFF1F2', // rose-50
+    backgroundCode: 'F3F4F6',
+    border: 'FFE4E6', // rose-100
+    accent: 'EC4899', // pink-500
+    quote: 'F43F5E', // rose-500
+  },
+  // 石板主题 - 简约现代
+  slate: {
+    primary: '475569', // slate-600
+    primaryDark: '334155', // slate-700
+    secondary: '64748B', // slate-500
+    text: '1E293B', // slate-800
+    textMuted: '64748B', // slate-500
+    textLight: '94A3B8', // slate-400
+    background: 'FFFFFF',
+    backgroundAlt: 'F8FAFC', // slate-50
+    backgroundCode: 'F1F5F9', // slate-100
+    border: 'E2E8F0', // slate-200
+    accent: '0EA5E9', // sky-500
+    quote: '64748B', // slate-500
+  },
+}
+
+// 默认主题
+const DEFAULT_THEME: ThemeName = 'blue'
+
+// 获取主题颜色
+export function getTheme(name?: ThemeName): ThemeColors {
+  return THEMES[name || DEFAULT_THEME] || THEMES[DEFAULT_THEME]
+}
+
+// 获取所有可用主题名称
+export function getAvailableThemes(): ThemeName[] {
+  return Object.keys(THEMES) as ThemeName[]
 }
 
 const FONTS = {
@@ -64,10 +211,12 @@ interface Position {
 
 export class DSLRenderer {
   private pptx: PptxGenJS
+  private theme: ThemeColors
 
-  constructor() {
+  constructor(themeName?: ThemeName) {
     this.pptx = new PptxGenJS()
     this.pptx.layout = 'LAYOUT_16x9'
+    this.theme = getTheme(themeName)
   }
 
   /**
@@ -132,16 +281,22 @@ export class DSLRenderer {
    * 仅标题布局（适合封面页）
    */
   private renderTitleOnly(slide: PptxGenJS.Slide, dsl: SlideDSL): void {
-    slide.background = { color: THEME.primary }
+    slide.background = { color: this.theme.primary }
 
     // 装饰圆形
     slide.addShape('ellipse', {
-      x: -1, y: -1, w: 4, h: 4,
-      fill: { color: THEME.primaryDark, transparency: 50 },
+      x: -1,
+      y: -1,
+      w: 4,
+      h: 4,
+      fill: { color: this.theme.primaryDark, transparency: 50 },
     })
     slide.addShape('ellipse', {
-      x: 7, y: 3, w: 5, h: 5,
-      fill: { color: THEME.secondary, transparency: 60 },
+      x: 7,
+      y: 3,
+      w: 5,
+      h: 5,
+      fill: { color: this.theme.secondary, transparency: 60 },
     })
 
     // 主标题
@@ -181,7 +336,7 @@ export class DSLRenderer {
    * 章节分隔页布局
    */
   private renderSection(slide: PptxGenJS.Slide, dsl: SlideDSL): void {
-    slide.background = { color: THEME.backgroundAlt }
+    slide.background = { color: this.theme.backgroundAlt }
 
     // 章节标题
     if (dsl.title) {
@@ -192,7 +347,7 @@ export class DSLRenderer {
         h: 1.2,
         fontSize: 44,
         bold: true,
-        color: THEME.primary,
+        color: this.theme.primary,
         fontFace: FONTS.title,
         align: 'center',
         valign: 'middle',
@@ -205,7 +360,7 @@ export class DSLRenderer {
       y: 3.4,
       w: 2,
       h: 0.08,
-      fill: { color: THEME.primary },
+      fill: { color: this.theme.primary },
     })
 
     // 副标题（如果有）
@@ -216,7 +371,7 @@ export class DSLRenderer {
         w: LAYOUT.width - LAYOUT.margin * 2,
         h: 0.6,
         fontSize: 18,
-        color: THEME.textMuted,
+        color: this.theme.textMuted,
         fontFace: FONTS.body,
         align: 'center',
       })
@@ -227,20 +382,29 @@ export class DSLRenderer {
    * 标题+内容布局（最常用）
    */
   private renderTitleContent(slide: PptxGenJS.Slide, dsl: SlideDSL): void {
-    slide.background = { color: THEME.background }
+    slide.background = { color: this.theme.background }
 
     // 顶部装饰条
     slide.addShape('rect', {
-      x: 0, y: 0, w: 0.08, h: 1.1,
-      fill: { color: THEME.primary },
+      x: 0,
+      y: 0,
+      w: 0.08,
+      h: 1.1,
+      fill: { color: this.theme.primary },
     })
     slide.addShape('rect', {
-      x: 0, y: 0, w: LAYOUT.width, h: 1.1,
-      fill: { color: THEME.backgroundAlt },
+      x: 0,
+      y: 0,
+      w: LAYOUT.width,
+      h: 1.1,
+      fill: { color: this.theme.backgroundAlt },
     })
     slide.addShape('rect', {
-      x: 0, y: 0, w: 0.08, h: 1.1,
-      fill: { color: THEME.primary },
+      x: 0,
+      y: 0,
+      w: 0.08,
+      h: 1.1,
+      fill: { color: this.theme.primary },
     })
 
     // 标题
@@ -252,7 +416,7 @@ export class DSLRenderer {
         h: LAYOUT.titleHeight,
         fontSize: 26,
         bold: true,
-        color: THEME.text,
+        color: this.theme.text,
         fontFace: FONTS.title,
         valign: 'middle',
       })
@@ -273,12 +437,13 @@ export class DSLRenderer {
    * 双栏布局
    */
   private renderTwoColumn(slide: PptxGenJS.Slide, dsl: SlideDSL): void {
-    slide.background = { color: THEME.background }
+    slide.background = { color: this.theme.background }
 
     // 标题区域
     this.renderSlideHeader(slide, dsl.title)
 
-    const columnWidth = (LAYOUT.width - LAYOUT.margin * 2 - LAYOUT.columnGap) / 2
+    const columnWidth =
+      (LAYOUT.width - LAYOUT.margin * 2 - LAYOUT.columnGap) / 2
 
     // 左栏
     if (dsl.leftContent && dsl.leftContent.length > 0) {
@@ -305,12 +470,13 @@ export class DSLRenderer {
    * 对比布局（类似双栏但有标签）
    */
   private renderComparison(slide: PptxGenJS.Slide, dsl: SlideDSL): void {
-    slide.background = { color: THEME.background }
+    slide.background = { color: this.theme.background }
 
     // 标题
     this.renderSlideHeader(slide, dsl.title)
 
-    const columnWidth = (LAYOUT.width - LAYOUT.margin * 2 - LAYOUT.columnGap) / 2
+    const columnWidth =
+      (LAYOUT.width - LAYOUT.margin * 2 - LAYOUT.columnGap) / 2
 
     // 左侧标签
     slide.addShape('rect', {
@@ -318,7 +484,7 @@ export class DSLRenderer {
       y: LAYOUT.contentStartY - 0.05,
       w: columnWidth,
       h: 0.4,
-      fill: { color: THEME.primary },
+      fill: { color: this.theme.primary },
     })
 
     // 右侧标签
@@ -327,7 +493,7 @@ export class DSLRenderer {
       y: LAYOUT.contentStartY - 0.05,
       w: columnWidth,
       h: 0.4,
-      fill: { color: THEME.secondary },
+      fill: { color: this.theme.secondary },
     })
 
     // 左栏内容
@@ -359,12 +525,18 @@ export class DSLRenderer {
   private renderSlideHeader(slide: PptxGenJS.Slide, title?: string): void {
     // 顶部装饰
     slide.addShape('rect', {
-      x: 0, y: 0, w: LAYOUT.width, h: 1.1,
-      fill: { color: THEME.backgroundAlt },
+      x: 0,
+      y: 0,
+      w: LAYOUT.width,
+      h: 1.1,
+      fill: { color: this.theme.backgroundAlt },
     })
     slide.addShape('rect', {
-      x: 0, y: 0, w: 0.08, h: 1.1,
-      fill: { color: THEME.primary },
+      x: 0,
+      y: 0,
+      w: 0.08,
+      h: 1.1,
+      fill: { color: this.theme.primary },
     })
 
     if (title) {
@@ -375,7 +547,7 @@ export class DSLRenderer {
         h: LAYOUT.titleHeight,
         fontSize: 26,
         bold: true,
-        color: THEME.text,
+        color: this.theme.text,
         fontFace: FONTS.title,
         valign: 'middle',
       })
@@ -390,7 +562,7 @@ export class DSLRenderer {
   private renderContentBlocks(
     slide: PptxGenJS.Slide,
     blocks: ContentBlock[],
-    startPos: Position
+    startPos: Position,
   ): void {
     let currentY = startPos.y
 
@@ -413,7 +585,7 @@ export class DSLRenderer {
   private renderContentBlock(
     slide: PptxGenJS.Slide,
     block: ContentBlock,
-    pos: Position
+    pos: Position,
   ): number {
     switch (block.type) {
       case 'paragraph':
@@ -439,17 +611,17 @@ export class DSLRenderer {
   private renderParagraph(
     slide: PptxGenJS.Slide,
     block: ParagraphBlock,
-    pos: Position
+    pos: Position,
   ): number {
     // 估算高度（每50字符约0.25英寸）
     const lines = Math.ceil(block.text.length / 50)
     const height = Math.max(0.4, lines * 0.25)
 
-    let color = THEME.text
+    let color = this.theme.text
     if (block.emphasis === 'highlight') {
-      color = THEME.primary
+      color = this.theme.primary
     } else if (block.emphasis === 'muted') {
-      color = THEME.textMuted
+      color = this.theme.textMuted
     }
 
     slide.addText(block.text, {
@@ -472,7 +644,7 @@ export class DSLRenderer {
   private renderBullets(
     slide: PptxGenJS.Slide,
     block: BulletsBlock,
-    pos: Position
+    pos: Position,
   ): number {
     const itemHeight = 0.35
     const height = block.items.length * itemHeight
@@ -486,7 +658,7 @@ export class DSLRenderer {
         y: itemY + 0.1,
         w: 0.15,
         h: 0.15,
-        fill: { color: THEME.primary },
+        fill: { color: this.theme.primary },
       })
 
       // 文字
@@ -496,7 +668,7 @@ export class DSLRenderer {
         w: pos.w - 0.3,
         h: itemHeight,
         fontSize: 15,
-        color: THEME.text,
+        color: this.theme.text,
         fontFace: FONTS.body,
         valign: 'middle',
       })
@@ -511,7 +683,7 @@ export class DSLRenderer {
   private renderNumbered(
     slide: PptxGenJS.Slide,
     block: NumberedBlock,
-    pos: Position
+    pos: Position,
   ): number {
     const itemHeight = 0.35
     const height = block.items.length * itemHeight
@@ -527,7 +699,7 @@ export class DSLRenderer {
         h: itemHeight,
         fontSize: 15,
         bold: true,
-        color: THEME.primary,
+        color: this.theme.primary,
         fontFace: FONTS.body,
         valign: 'middle',
       })
@@ -539,7 +711,7 @@ export class DSLRenderer {
         w: pos.w - 0.35,
         h: itemHeight,
         fontSize: 15,
-        color: THEME.text,
+        color: this.theme.text,
         fontFace: FONTS.body,
         valign: 'middle',
       })
@@ -554,12 +726,12 @@ export class DSLRenderer {
   private renderCode(
     slide: PptxGenJS.Slide,
     block: CodeBlock,
-    pos: Position
+    pos: Position,
   ): number {
-    const lineHeight = 0.16  // 减小行高以容纳更多行
+    const lineHeight = 0.16 // 减小行高以容纳更多行
     const padding = 0.12
     const height = block.lines.length * lineHeight + padding * 2
-    const maxHeight = 3.5  // 增加最大高度
+    const maxHeight = 3.5 // 增加最大高度
 
     // 背景
     slide.addShape('rect', {
@@ -567,8 +739,8 @@ export class DSLRenderer {
       y: pos.y,
       w: pos.w,
       h: Math.min(height, maxHeight),
-      fill: { color: THEME.backgroundCode },
-      line: { color: THEME.border, width: 0.5 },
+      fill: { color: this.theme.backgroundCode },
+      line: { color: this.theme.border, width: 0.5 },
     })
 
     // 语言标签
@@ -579,7 +751,7 @@ export class DSLRenderer {
         w: 0.7,
         h: 0.18,
         fontSize: 7,
-        color: THEME.textMuted,
+        color: this.theme.textMuted,
         fontFace: FONTS.code,
         align: 'right',
       })
@@ -592,8 +764,8 @@ export class DSLRenderer {
       y: pos.y + padding,
       w: pos.w - padding * 2,
       h: Math.min(height - padding * 2, maxHeight - padding * 2),
-      fontSize: 8,  // 减小字体
-      color: THEME.text,
+      fontSize: 8, // 减小字体
+      color: this.theme.text,
       fontFace: FONTS.code,
       valign: 'top',
     })
@@ -606,7 +778,7 @@ export class DSLRenderer {
         w: pos.w,
         h: 0.2,
         fontSize: 9,
-        color: THEME.textMuted,
+        color: this.theme.textMuted,
         fontFace: FONTS.body,
         align: 'center',
       })
@@ -622,7 +794,7 @@ export class DSLRenderer {
   private renderTable(
     slide: PptxGenJS.Slide,
     block: TableBlock,
-    pos: Position
+    pos: Position,
   ): number {
     const rowHeight = 0.35
     const totalRows = 1 + block.rows.length // 表头 + 数据行
@@ -637,14 +809,14 @@ export class DSLRenderer {
         text: h,
         options: {
           bold: true,
-          fill: { color: THEME.primary },
+          fill: { color: this.theme.primary },
           color: 'FFFFFF',
           fontSize: 12,
           fontFace: FONTS.body,
           align: 'center' as const,
           valign: 'middle' as const,
         },
-      }))
+      })),
     )
 
     // 数据行
@@ -653,14 +825,19 @@ export class DSLRenderer {
         row.map((cell) => ({
           text: cell,
           options: {
-            fill: { color: rowIndex % 2 === 0 ? THEME.backgroundAlt : THEME.background },
-            color: THEME.text,
+            fill: {
+              color:
+                rowIndex % 2 === 0
+                  ? this.theme.backgroundAlt
+                  : this.theme.background,
+            },
+            color: this.theme.text,
             fontSize: 11,
             fontFace: FONTS.body,
             align: 'center' as const,
             valign: 'middle' as const,
           },
-        }))
+        })),
       )
     })
 
@@ -669,7 +846,7 @@ export class DSLRenderer {
       y: pos.y,
       w: pos.w,
       rowH: rowHeight,
-      border: { type: 'solid', pt: 0.5, color: THEME.border },
+      border: { type: 'solid', pt: 0.5, color: this.theme.border },
     })
 
     // 标题（如果有）
@@ -680,7 +857,7 @@ export class DSLRenderer {
         w: pos.w,
         h: 0.2,
         fontSize: 10,
-        color: THEME.textMuted,
+        color: this.theme.textMuted,
         fontFace: FONTS.body,
         align: 'center',
       })
@@ -696,7 +873,7 @@ export class DSLRenderer {
   private renderQuote(
     slide: PptxGenJS.Slide,
     block: QuoteBlock,
-    pos: Position
+    pos: Position,
   ): number {
     // 估算高度
     const lines = Math.ceil(block.text.length / 45)
@@ -710,7 +887,7 @@ export class DSLRenderer {
       y: pos.y,
       w: 0.06,
       h: height,
-      fill: { color: THEME.quote },
+      fill: { color: this.theme.quote },
     })
 
     // 引用符号
@@ -720,7 +897,7 @@ export class DSLRenderer {
       w: 0.3,
       h: 0.4,
       fontSize: 32,
-      color: THEME.quote,
+      color: this.theme.quote,
       fontFace: FONTS.title,
       bold: true,
     })
@@ -733,7 +910,7 @@ export class DSLRenderer {
       h: textHeight,
       fontSize: 14,
       italic: true,
-      color: THEME.text,
+      color: this.theme.text,
       fontFace: FONTS.body,
       valign: 'top',
     })
@@ -746,7 +923,7 @@ export class DSLRenderer {
         w: pos.w - 0.3,
         h: authorHeight,
         fontSize: 12,
-        color: THEME.textMuted,
+        color: this.theme.textMuted,
         fontFace: FONTS.body,
         align: 'right',
       })
@@ -763,9 +940,10 @@ export class DSLRenderer {
  */
 export async function generatePPTXFromDSL(
   presentation: PresentationDSL,
-  topic: string
+  topic: string,
+  theme?: ThemeName,
 ): Promise<string> {
-  const renderer = new DSLRenderer()
+  const renderer = new DSLRenderer(theme)
   renderer.render(presentation, topic)
   return renderer.export()
 }

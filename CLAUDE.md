@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-AI PPT Creator - An AI-powered presentation generator that creates professional PPTX files from user-provided topics. Users input a topic, select language (Chinese/English), and choose presentation duration (5-30 minutes). The AI collects research via web search, generates an outline, creates content, and exports to PPTX format.
+AI PPT Creator - An AI-powered presentation generator that creates professional PPTX files from user-provided topics. Users input a topic and select language (Chinese/English). The AI collects research via web search, generates an outline, creates content. Before export, users can choose a theme color for the final PPTX.
 
 ## Commands
 
@@ -17,29 +17,67 @@ npm run lint     # Run ESLint
 
 ## Tech Stack
 
-- **Framework**: Next.js 16 (App Router)
+- **Framework**: Next.js 16.1.2 (App Router), React 19.2.3
 - **UI**: Tailwind CSS 4 + shadcn/ui (Radix primitives)
-- **State**: Zustand
-- **AI**: OpenAI API or Anthropic Claude API (configurable via env)
+- **State**: Zustand 5.x
+- **AI**: OpenAI SDK (supports OpenAI-compatible APIs via BASE_URL)
 - **Web Search**: Tavily API or SerpAPI (configurable via env)
-- **PPT Generation**: PptxGenJS
-- **Validation**: Zod
+- **PPT Generation**: PptxGenJS 4.x
+- **Validation**: Zod 4.x
 
 ## Architecture
 
 ### Generation Pipeline
 
 ```
-User Input → Create Session → Collect Resources → Generate Outline → Generate DSL Content → Render PPTX
+User Input → Create Session → AI Research (Collect + Summarize) → Generate Outline → Generate DSL Content → Render PPTX
 ```
 
 The pipeline is implemented as a multi-step API workflow with session-based state persistence:
 
-1. **Session Creation** (`POST /api/session/create`) - Creates session with topic, language, duration
-2. **Resource Collection** (`POST /api/session/[id]/collect`) - Web search via Tavily/SerpAPI
-3. **Outline Generation** (`POST /api/session/[id]/outline`) - AI generates section structure
+1. **Session Creation** (`POST /api/session/create`) - Creates session with topic, language
+2. **Resource Collection** (`POST /api/session/[id]/collect`) - AI-driven research with function calling
+3. **Outline Generation** (`POST /api/session/[id]/outline`) - AI generates section structure using research summary
 4. **Content Generation** (`POST /api/session/[id]/content`) - AI generates DSL slides for each section
-5. **PPTX Export** (`GET /api/session/[id]/export`) - DSLRenderer converts to PPTX
+5. **PPTX Export** (`POST /api/session/[id]/export`) - DSLRenderer converts to PPTX with selected theme
+
+### AI-Driven Resource Collection
+
+Resource collection uses AI with function calling tools to intelligently gather and summarize research materials:
+
+**Tools Available:**
+- `search_web(query)` - Search web for relevant materials (max 5 results per search)
+- `fetch_url(url)` - Fetch full content of specific URLs
+- `finish_research(summary)` - Complete research with comprehensive summary
+
+**Workflow:**
+1. AI analyzes topic and determines search strategy
+2. AI performs 2-3 searches covering different angles (concepts, techniques, applications)
+3. AI fetches detailed content from important URLs
+4. AI generates comprehensive summary (500-1500 words)
+5. Summary stored in `ResourceData.summary` for downstream use
+
+**Configuration:**
+- Max iterations: 20 (prevents infinite loops)
+- Falls back to direct search if AI research fails
+
+**Data Model:**
+```typescript
+interface ResourceResult {
+  title: string
+  url: string
+  content: string      // Search snippet
+  rawContent?: string  // Full page content
+  query?: string       // Search query used
+}
+
+interface ResourceData {
+  topic: string                // User's input topic
+  results: ResourceResult[]    // Raw search results
+  summary?: string             // AI-generated research summary (preferred)
+  collectedAt: string
+}
+```
 
 ### Session State Machine
 
@@ -82,11 +120,15 @@ The slide content uses a JSON-based DSL (`src/types/slide-dsl.ts`) that serves a
 | `MAX_CONTENT_BLOCKS_PER_SLIDE` | 3 | Blocks before pagination (legacy) |
 | `MAX_CONTENT_BLOCKS_PER_COLUMN` | 2 | Blocks per column |
 | `MAX_TITLE_LENGTH` | 100 | Title chars |
+| `MAX_SUBTITLE_LENGTH` | 150 | Subtitle chars |
 | `MAX_PARAGRAPH_LENGTH` | 300 | Paragraph chars |
 | `MAX_LIST_ITEMS` | 8 | List items before split |
+| `MAX_LIST_ITEM_LENGTH` | 100 | Single list item chars |
 | `MAX_CODE_LINES` | 25 | Code lines before split |
+| `MAX_CODE_LINE_LENGTH` | 80 | Code line chars |
 | `MAX_TABLE_ROWS` | 8 | Table rows before split |
 | `MAX_TABLE_COLUMNS` | 5 | Max columns |
+| `MAX_QUOTE_LENGTH` | 200 | Quote text chars |
 
 #### Smart Pagination (splitByContentSize)
 
@@ -97,6 +139,11 @@ The slide content uses a JSON-based DSL (`src/types/slide-dsl.ts`) that serves a
 | `MAX_CONTENT_HEIGHT` | 4.2" | 可用内容区域高度（放宽后，原3.9"） |
 | `MIN_CONTENT_HEIGHT` | 0.8" | 最小内容阈值（少于此值合并到前页） |
 | `BLOCK_SPACING` | 0.15" | 内容块间距 |
+
+**分页算法：**
+1. 按顺序分配内容块，超过 `MAX_CONTENT_HEIGHT` 时新建页面
+2. 最后一页若低于 `MIN_CONTENT_HEIGHT`，自动合并到前一页
+3. 多页时标题添加 `(1/N)` 后缀
 
 内容块高度计算（基于 dsl-renderer.ts）：
 
@@ -116,6 +163,13 @@ The parser (`src/lib/dsl-parser.ts`) handles malformed AI output:
 3. Detects/truncates incomplete JSON
 4. Falls back to Markdown table parsing
 5. Lenient mode normalizes invalid structures
+
+#### Content Block Validation (dsl-generator.ts)
+
+AI-generated slides are validated before acceptance:
+- Only 6 valid content block types: `paragraph`, `bullets`, `numbered`, `code`, `table`, `quote`
+- Invalid types trigger re-generation request via tool feedback
+- Validates `content`, `leftContent`, `rightContent` arrays
 
 ### Key Files
 
@@ -139,10 +193,10 @@ The parser (`src/lib/dsl-parser.ts`) handles malformed AI output:
 
 | Route | Purpose |
 |-------|---------|
-| `/` | Input form (topic, language, duration) |
+| `/` | Input form (topic, language) |
 | `/generate` | Progress display during generation |
-| `/result` | Outline preview and PPTX download |
-| `/history` | View past generations (IDs stored in localStorage) |
+| `/result` | Outline preview, theme selection, and PPTX download |
+| `/history` | View past generations, click download to go to result page |
 
 ## Environment Variables
 
@@ -150,12 +204,12 @@ Copy `.env.example` to `.env.local`:
 
 ```env
 # AI Provider (openai or anthropic)
-AI_PROVIDER=
-BASE_URL=
+AI_PROVIDER=openai
+BASE_URL=             # Optional: for OpenAI-compatible APIs
 API_KEY=
-MODE=  # model name
+MODEL=                # or MODE, defaults to gpt-4o (openai) / claude-sonnet-4-20250514 (anthropic)
 
-# Web Search (choose one)
+# Web Search (choose one, priority: Tavily > SerpAPI)
 TAVILY_API_KEY=
 SERP_API_KEY=
 ```
@@ -172,25 +226,71 @@ SERP_API_KEY=
 
 ## Design System
 
-- **Primary color**: Blue (#2563eb)
 - **Theme constants**: Defined in `DSLRenderer` class (`src/lib/dsl-renderer.ts`)
+- **Default theme**: Blue (professional business)
 - **Full specs**: `/docs/ui/design-system.md`
 
-### Theme Colors (THEME constant)
+### Available Themes
 
-| Name | Hex | Usage |
-|------|-----|-------|
-| `primary` | #2563EB | Blue-600, main accent |
-| `primaryDark` | #1D4ED8 | Blue-700, hover states |
-| `secondary` | #6366F1 | Indigo-500, secondary accent |
-| `text` | #1F2937 | Gray-800, main text |
-| `textMuted` | #6B7280 | Gray-500, secondary text |
-| `background` | #FFFFFF | White, slide background |
-| `backgroundAlt` | #F9FAFB | Gray-50, section backgrounds |
-| `backgroundCode` | #F3F4F6 | Gray-100, code blocks |
-| `border` | #E5E7EB | Gray-200, borders |
-| `accent` | #10B981 | Emerald-500, success states |
-| `quote` | #F59E0B | Amber-500, quote accent |
+| Theme | Primary Color | Description |
+|-------|---------------|-------------|
+| `blue` | #2563EB | Professional business (default) |
+| `green` | #16A34A | Natural and fresh |
+| `teal` | #0D9488 | Tech and modern |
+| `purple` | #9333EA | Creative and elegant |
+| `orange` | #EA580C | Vibrant and passionate |
+| `red` | #DC2626 | Bold and striking |
+| `rose` | #E11D48 | Warm and soft |
+| `slate` | #475569 | Minimal and modern |
+
+### Theme Selection
+
+Theme is selected on the result page (`/result`) before downloading. Users can switch themes and re-download without regenerating content.
+
+**Frontend Flow:**
+1. User completes generation and lands on `/result`
+2. Theme selector shows 8 color options (default: blue)
+3. User selects desired theme and clicks download
+4. Export API receives theme and renders PPTX
+
+**API Usage:**
+```typescript
+POST /api/session/[id]/export
+{
+  "theme": "purple"  // Optional, defaults to "blue"
+}
+```
+
+The export API also accepts theme via session (for API-only usage):
+```typescript
+POST /api/session/create
+{
+  "topic": "AI in Healthcare",
+  "language": "en-US",
+  "theme": "purple"  // Optional, stored in session
+}
+```
+
+If theme is provided in export request body, it overrides the session theme.
+
+### Theme Color Properties
+
+Each theme defines these color properties:
+
+| Property | Usage |
+|----------|-------|
+| `primary` | Main accent color, titles, headers |
+| `primaryDark` | Hover states, darker accent |
+| `secondary` | Secondary accent color |
+| `text` | Main body text |
+| `textMuted` | Secondary/muted text |
+| `textLight` | Light text (on dark backgrounds) |
+| `background` | Slide background (white) |
+| `backgroundAlt` | Section/comparison backgrounds |
+| `backgroundCode` | Code block backgrounds |
+| `border` | Border colors |
+| `accent` | Success/highlight states |
+| `quote` | Quote block accent |
 
 ### Layout Constants (LAYOUT)
 
@@ -209,7 +309,26 @@ The AI generates slides via function calling with two tools:
 - **`add_slide(slide: SlideDSL)`**: Adds a slide to the presentation
 - **`finish_generation()`**: Signals end of generation
 
-Max 50 iterations to prevent infinite loops. Falls back to simple generation if function calling fails.
+**Configuration:**
+- Temperature: 0.7
+- Max iterations: 50 (prevents infinite loops)
+- Falls back to simple generation if function calling fails
+
+**Layout Restriction in Function Calling:**
+During function calling, AI can only generate these layouts:
+- `title-content` - Single column content
+- `two-column` - Two column layout
+- `comparison` - Comparison layout with colored headers
+
+`title-only` and `section` layouts are auto-generated by the system (cover, contents, section dividers, thank you page).
+
+**Tool Argument Parsing:**
+`safeParseToolArgs()` handles malformed JSON from AI with:
+1. Direct parse attempt
+2. Remove trailing commas
+3. Fix unescaped newlines in strings
+4. Truncate to last complete object
+5. Extract JSON-like pattern
 
 ## Web Scraping (src/lib/scraper.ts)
 

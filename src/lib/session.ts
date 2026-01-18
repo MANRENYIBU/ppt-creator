@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { GenerationSession, GenerationStage } from '@/types';
+import { GenerationSession, GenerationStage, ThemeName } from '@/types';
 
 // 会话存储目录
 const SESSIONS_DIR = path.join(process.cwd(), '.sessions');
@@ -25,7 +25,8 @@ function getSessionPath(id: string): string {
 export async function createSession(
   id: string,
   topic: string,
-  language: 'zh-CN' | 'en-US'
+  language: 'zh-CN' | 'en-US',
+  theme?: ThemeName
 ): Promise<GenerationSession> {
   await ensureDir();
 
@@ -33,6 +34,7 @@ export async function createSession(
     id,
     topic,
     language,
+    theme,
     stage: 'idle',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { GenerateRequest } from '@/types';
+import { GenerateRequest, ThemeName } from '@/types';
 import { validateConfig } from '@/lib/config';
 import { createSession, cleanupOldSessions } from '@/lib/session';
+
+// 有效的主题名称
+const VALID_THEMES: ThemeName[] = ['blue', 'green', 'purple', 'orange', 'red', 'slate', 'teal', 'rose'];
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,7 +19,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body: GenerateRequest = await request.json();
-    const { topic, language } = body;
+    const { topic, language, theme } = body;
 
     // 参数验证
     if (!topic || !language) {
@@ -40,12 +43,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 验证主题（可选）
+    const validTheme = theme && VALID_THEMES.includes(theme) ? theme : undefined;
+
     // 清理旧会话（后台执行）
     cleanupOldSessions().catch(console.error);
 
     // 创建新会话
     const sessionId = uuidv4();
-    const session = await createSession(sessionId, topic, language);
+    const session = await createSession(sessionId, topic, language, validTheme);
 
     return NextResponse.json(session);
   } catch (error) {

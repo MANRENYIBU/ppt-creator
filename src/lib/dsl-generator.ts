@@ -381,10 +381,20 @@ Use the add_slide tool to generate slides for this section. Requirements:
 }
 
 /**
- * 构建资料上下文
+ * 构建资料上下文（优先使用 AI 总结）
  */
 function buildResourceContext(resources: ResourceData | null): string {
-  if (!resources || resources.results.length === 0) {
+  if (!resources) {
+    return ''
+  }
+
+  // 优先使用 AI 总结
+  if (resources.summary) {
+    return resources.summary
+  }
+
+  // 降级：使用原始资料
+  if (resources.results.length === 0) {
     return ''
   }
 

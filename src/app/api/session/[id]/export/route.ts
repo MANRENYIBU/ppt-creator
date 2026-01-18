@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession, updateSessionStage } from '@/lib/session';
 import { generatePPTXFromDSL } from '@/lib/dsl-renderer';
+import { ThemeName } from '@/types';
+
+// 有效的主题名称
+const VALID_THEMES: ThemeName[] = ['blue', 'green', 'purple', 'orange', 'red', 'slate', 'teal', 'rose'];
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -25,14 +29,26 @@ export async function POST(
       );
     }
 
+    // 从请求体获取主题（优先使用请求中的主题，否则使用会话中的主题）
+    let theme: ThemeName | undefined = session.theme;
+    try {
+      const body = await request.json();
+      if (body.theme && VALID_THEMES.includes(body.theme)) {
+        theme = body.theme;
+      }
+    } catch {
+      // 请求体为空或解析失败，使用会话中的主题
+    }
+
     // 更新阶段
     await updateSessionStage(id, 'exporting');
 
     try {
-      // 每次都重新渲染PPTX
+      // 每次都重新渲染PPTX（使用请求中的主题或会话中的主题）
       const downloadUrl = await generatePPTXFromDSL(
         session.dslPresentation,
-        session.topic
+        session.topic,
+        theme
       );
 
       // 标记完成（不存储downloadUrl，每次都重新生成）

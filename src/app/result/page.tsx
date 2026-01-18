@@ -10,11 +10,24 @@ import {
   History,
   Loader2,
   FileText,
+  Palette,
 } from 'lucide-react'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
 import { useGenerationStore } from '@/store/generation'
-import { GenerationSession } from '@/types'
+import { GenerationSession, ThemeName } from '@/types'
+
+// 主题配置
+const THEMES: { name: ThemeName; label: string; labelEn: string; color: string }[] = [
+  { name: 'blue', label: '专业蓝', labelEn: 'Blue', color: '#2563EB' },
+  { name: 'green', label: '清新绿', labelEn: 'Green', color: '#16A34A' },
+  { name: 'teal', label: '科技青', labelEn: 'Teal', color: '#0D9488' },
+  { name: 'purple', label: '优雅紫', labelEn: 'Purple', color: '#9333EA' },
+  { name: 'orange', label: '活力橙', labelEn: 'Orange', color: '#EA580C' },
+  { name: 'red', label: '醒目红', labelEn: 'Red', color: '#DC2626' },
+  { name: 'rose', label: '温暖粉', labelEn: 'Rose', color: '#E11D48' },
+  { name: 'slate', label: '简约灰', labelEn: 'Slate', color: '#475569' },
+]
 
 function ResultContent() {
   const router = useRouter()
@@ -25,6 +38,7 @@ function ResultContent() {
   const [session, setSession] = useState<GenerationSession | null>(null)
   const [loading, setLoading] = useState(true)
   const [downloading, setDownloading] = useState(false)
+  const [selectedTheme, setSelectedTheme] = useState<ThemeName>('blue')
 
   useEffect(() => {
     const loadSession = async () => {
@@ -44,6 +58,10 @@ function ResultContent() {
       // 确保会话ID在列表中
       addSessionId(sessionId)
       setSession(fetchedSession)
+      // 使用会话中的主题作为默认值
+      if (fetchedSession.theme) {
+        setSelectedTheme(fetchedSession.theme)
+      }
       setLoading(false)
     }
 
@@ -65,9 +83,11 @@ function ResultContent() {
 
     setDownloading(true)
     try {
-      // 每次都调用 export API 生成新的 PPTX
+      // 每次都调用 export API 生成新的 PPTX，传递选中的主题
       const response = await fetch(`/api/session/${sessionId}/export`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme: selectedTheme }),
       })
 
       if (!response.ok) {
@@ -154,6 +174,36 @@ function ResultContent() {
                     : `${session.dslPresentation.slides.length} slides total`}
                 </p>
               )}
+
+              {/* 主题颜色选择 */}
+              <div className="mb-6 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <Palette className="h-4 w-4 text-green-600" />
+                  {isZh ? '选择主题颜色' : 'Choose Theme Color'}
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {THEMES.map((t) => (
+                    <button
+                      key={t.name}
+                      type="button"
+                      onClick={() => setSelectedTheme(t.name)}
+                      className={`group relative flex flex-col items-center gap-1.5 rounded-lg border-2 p-2 transition-all ${
+                        selectedTheme === t.name
+                          ? 'border-gray-900 bg-gray-50'
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
+                      }`}
+                    >
+                      <div
+                        className="h-6 w-6 rounded-full shadow-sm ring-2 ring-white"
+                        style={{ backgroundColor: t.color }}
+                      />
+                      <span className="text-xs text-gray-600">
+                        {isZh ? t.label : t.labelEn}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* 下载按钮 */}
               <Button
