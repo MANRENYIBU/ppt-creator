@@ -50,13 +50,8 @@ export default function HomePage() {
       // 保存会话ID到本地
       addSessionId(session.id);
 
-      // 跳转到生成页面（带上 session ID）
-      const params = new URLSearchParams({
-        topic: topic.trim(),
-        language,
-        session: session.id,
-      });
-      router.push(`/generate?${params.toString()}`);
+      // 跳转到生成页面（只需要 session ID）
+      router.push(`/generate?id=${session.id}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error';
       setError(message);

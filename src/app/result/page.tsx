@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
-import { useGenerationStore } from '@/store/generation'
+import { useGenerationStore, fetchSession } from '@/store/generation'
 import { GenerationSession, ThemeName } from '@/types'
 
 // 主题配置
@@ -32,7 +32,7 @@ const THEMES: { name: ThemeName; label: string; labelEn: string; color: string }
 function ResultContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { fetchSessionFresh, addSessionId } = useGenerationStore()
+  const { addSessionId } = useGenerationStore()
 
   const sessionId = searchParams.get('id')
   const [session, setSession] = useState<GenerationSession | null>(null)
@@ -48,8 +48,8 @@ function ResultContent() {
       }
 
       setLoading(true)
-      // 强制从服务器获取最新数据，跳过缓存（因为 generate 页面可能有旧缓存）
-      const fetchedSession = await fetchSessionFresh(sessionId)
+      // 直接从服务器获取最新数据
+      const fetchedSession = await fetchSession(sessionId)
 
       if (!fetchedSession) {
         router.replace('/')
@@ -67,7 +67,7 @@ function ResultContent() {
     }
 
     loadSession()
-  }, [sessionId, fetchSessionFresh, addSessionId, router])
+  }, [sessionId, addSessionId, router])
 
   if (loading || !session) {
     return (

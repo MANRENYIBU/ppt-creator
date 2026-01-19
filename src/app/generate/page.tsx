@@ -22,6 +22,8 @@ import { GenerationStage } from '@/types'
  */
 interface GenerateResponse {
   id: string
+  topic: string
+  language: 'zh-CN' | 'en-US'
   stage: GenerationStage
   processing?: boolean
   error?: string
@@ -69,13 +71,8 @@ function GenerateContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  // URL 参数
-  const topic = searchParams.get('topic') || ''
-  const language = (searchParams.get('language') || 'zh-CN') as
-    | 'zh-CN'
-    | 'en-US'
-  const sessionId = searchParams.get('session')
-  const isZh = language === 'zh-CN'
+  // URL 参数：只需要 session ID
+  const sessionId = searchParams.get('id')
 
   // 状态
   const [session, setSession] = useState<GenerateResponse | null>(null)
@@ -85,7 +82,9 @@ function GenerateContent() {
   // Refs
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
   const startTimeRef = useRef<number>(0)
-  const initializedRef = useRef(false)
+
+  // 从 session 获取语言设置
+  const isZh = session?.language === 'zh-CN'
 
   // 清理定时器
   const cleanup = useCallback(() => {
@@ -167,7 +166,7 @@ function GenerateContent() {
     [],
   )
 
-  // 轮询逻辑（抽取为独立函数，方便复用）
+  // 轮询逻辑
   const startPolling = useCallback(() => {
     if (pollingRef.current) return // 已在轮询中
 
@@ -180,11 +179,7 @@ function GenerateContent() {
       // 检查超时
       if (Date.now() - startTimeRef.current > MAX_POLL_TIME) {
         cleanup()
-        setError(
-          isZh
-            ? '处理超时，请刷新页面重试'
-            : 'Processing timeout, please refresh and retry',
-        )
+        setError('Processing timeout, please refresh and retry')
         setIsGenerating(false)
         return
       }
@@ -210,7 +205,7 @@ function GenerateContent() {
         return
       }
     }, POLL_INTERVAL)
-  }, [callGenerateAPI, cleanup, isZh])
+  }, [callGenerateAPI, cleanup])
 
   // 开始生成流程
   const startGeneration = useCallback(async () => {
@@ -241,27 +236,29 @@ function GenerateContent() {
 
     // 开始轮询
     startPolling()
-  }, [sessionId, isGenerating, callGenerateAPI, isZh, startPolling])
+  }, [sessionId, isGenerating, callGenerateAPI, startPolling])
 
-  // 初始化：获取 session 状态并自动开始轮询
+  // 初始化：进入页面立即开始生成流程
   useEffect(() => {
-    if (!topic || !sessionId) {
+    if (!sessionId) {
       router.replace('/')
       return
     }
 
-    // 防止 StrictMode 下重复请求
-    if (initializedRef.current) return
-    initializedRef.current = true
-
-    // 获取初始状态（使用 generate API 保持响应格式一致）
-    const fetchInitialSession = async () => {
+    // 立即开始生成流程
+    const startGenerationFlow = async () => {
       try {
+        setIsGenerating(true)
+        startTimeRef.current = Date.now()
+
+        // 调用 generate API 启动处理
         const response = await fetch(`/api/session/${sessionId}/generate`, {
           method: 'POST',
         })
         if (!response.ok) {
-          router.replace('/')
+          const data = await response.json().catch(() => ({}))
+          setError(data.error || 'Failed to start generation')
+          setIsGenerating(false)
           return
         }
         const s: GenerateResponse = await response.json()
@@ -273,19 +270,23 @@ function GenerateContent() {
           return
         }
 
-        // 如果正在处理中或处于某个阶段，直接开始轮询
-        if (s.processing || (s.stage !== 'idle' && s.stage !== 'error')) {
-          setIsGenerating(true)
-          startTimeRef.current = Date.now()
-          startPolling()
+        // 如果出错，停止
+        if (s.stage === 'error') {
+          setError(s.error || 'Generation failed')
+          setIsGenerating(false)
+          return
         }
+
+        // 开始轮询
+        startPolling()
       } catch {
-        router.replace('/')
+        setError('Failed to start generation')
+        setIsGenerating(false)
       }
     }
 
-    fetchInitialSession()
-  }, [topic, sessionId, router, startPolling])
+    startGenerationFlow()
+  }, [sessionId, router, startPolling])
 
   // 跳转到结果页
   useEffect(() => {
@@ -300,6 +301,15 @@ function GenerateContent() {
 
   const isError = !!error || session?.stage === 'error'
   const isComplete = session?.stage === 'completed'
+
+  // 加载中状态（还没有获取到 session 数据）
+  if (!session && !error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-blue-50 via-white to-white">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+      </div>
+    )
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-blue-50 via-white to-white">
@@ -351,7 +361,7 @@ function GenerateContent() {
                       ? '准备生成'
                       : 'Ready to Generate'}
             </h1>
-            <p className="text-gray-500">&ldquo;{topic}&rdquo;</p>
+            <p className="text-gray-500">&ldquo;{session?.topic}&rdquo;</p>
           </div>
 
           {/* 进度卡片 */}

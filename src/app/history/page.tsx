@@ -15,13 +15,12 @@ import {
 } from 'lucide-react'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
-import { useGenerationStore } from '@/store/generation'
+import { useGenerationStore, fetchSessions } from '@/store/generation'
 import { GenerationSession } from '@/types'
 
 export default function HistoryPage() {
   const router = useRouter()
-  const { sessionIds, loadSessionIds, removeSessionId, fetchAllSessions } =
-    useGenerationStore()
+  const { sessionIds, loadSessionIds, removeSessionId } = useGenerationStore()
 
   const [sessions, setSessions] = useState<GenerationSession[]>([])
   const [loading, setLoading] = useState(true)
@@ -41,7 +40,7 @@ export default function HistoryPage() {
       }
 
       setLoading(true)
-      const fetchedSessions = await fetchAllSessions()
+      const fetchedSessions = await fetchSessions(sessionIds)
       // 按创建时间排序（最新的在前）
       fetchedSessions.sort(
         (a, b) =>
@@ -52,7 +51,7 @@ export default function HistoryPage() {
     }
 
     loadSessions()
-  }, [sessionIds, fetchAllSessions])
+  }, [sessionIds])
 
   const handleDownload = (sessionId: string) => {
     // 跳转到结果页，用户可以选择主题后下载
@@ -66,7 +65,7 @@ export default function HistoryPage() {
 
   const handleRefresh = async () => {
     setLoading(true)
-    const fetchedSessions = await fetchAllSessions()
+    const fetchedSessions = await fetchSessions(sessionIds)
     fetchedSessions.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -238,9 +237,7 @@ export default function HistoryPage() {
                           className="border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-600"
                           asChild
                         >
-                          <Link
-                            href={`/generate?topic=${encodeURIComponent(session.topic)}&language=${session.language}&session=${session.id}`}
-                          >
+                          <Link href={`/generate?id=${session.id}`}>
                             继续
                           </Link>
                         </Button>

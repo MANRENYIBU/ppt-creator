@@ -13,6 +13,8 @@ export const maxDuration = 120
  */
 interface GenerateResponse {
   id: string
+  topic: string
+  language: 'zh-CN' | 'en-US'
   stage: GenerationStage
   processing?: boolean
   error?: string
@@ -33,6 +35,8 @@ interface GenerateResponse {
 function toResponse(session: GenerationSession): GenerateResponse {
   return {
     id: session.id,
+    topic: session.topic,
+    language: session.language,
     stage: session.stage,
     processing: session.processing,
     error: session.error,

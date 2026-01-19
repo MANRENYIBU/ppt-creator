@@ -9,21 +9,58 @@ AI PPT Creator - An AI-powered presentation generator that creates professional 
 ## Commands
 
 ```bash
+# Development
 npm run dev      # Start development server (http://localhost:3000)
 npm run build    # Build for production
 npm run start    # Run production build
 npm run lint     # Run ESLint
+
+# PM2 Production (requires: npm install -g pm2)
+npm run pm2:start    # Start with PM2 (logs to ./logs/)
+npm run pm2:stop     # Stop PM2 process
+npm run pm2:restart  # Restart PM2 process
+npm run pm2:logs     # View live logs
+npm run pm2:status   # Check process status
 ```
 
 ## Tech Stack
 
 - **Framework**: Next.js 16.1.2 (App Router), React 19.2.3
-- **UI**: Tailwind CSS 4 + shadcn/ui (Radix primitives)
+- **UI**: Tailwind CSS 4 + shadcn/ui (Radix primitives) + tw-animate-css
 - **State**: Zustand 5.x
-- **AI**: OpenAI SDK (supports OpenAI-compatible APIs via BASE_URL)
+- **AI**: OpenAI SDK + Anthropic SDK (supports OpenAI-compatible APIs via BASE_URL)
 - **Web Search**: Tavily API or SerpAPI (configurable via env)
 - **PPT Generation**: PptxGenJS 4.x
 - **Validation**: Zod 4.x
+
+## Project Structure
+
+```
+ppt-creator/
+├── src/
+│   ├── app/                    # Next.js App Router pages & API routes
+│   ├── components/             # React components (header.tsx + ui/)
+│   ├── lib/                    # Core utilities & business logic
+│   ├── store/                  # Zustand state management
+│   └── types/                  # TypeScript type definitions
+├── docs/                       # Documentation (PRD, deployment, design-system)
+├── public/                     # Static assets (SVG files)
+├── .sessions/                  # Session storage (gitignored)
+├── .claude/skills/             # Claude Code skills
+└── Configuration files         # next.config.ts, tsconfig.json, etc.
+```
+
+## Configuration Files
+
+| File | Purpose |
+|------|---------|
+| `next.config.ts` | Next.js config with standalone output mode |
+| `tsconfig.json` | TypeScript config with `@/` path alias |
+| `postcss.config.mjs` | PostCSS with `@tailwindcss/postcss` plugin (Tailwind v4) |
+| `eslint.config.mjs` | ESLint configuration |
+| `components.json` | shadcn/ui CLI configuration |
+| `ecosystem.config.js` | PM2 process manager configuration |
+| `src/app/globals.css` | Tailwind v4 imports, OKLCH color variables, dark mode support |
 
 ## Architecture
 
@@ -58,6 +95,11 @@ The frontend uses a polling-based approach for reliability:
 4. Frontend polls every 5s, triggers generate API when stage changes
 5. On completion, redirects to result page for theme selection and export
 6. Max polling duration: 60 minutes
+
+**Polling Implementation Details:**
+- `processing` flag prevents duplicate API calls during active requests
+- Resource preview shows only titles and URLs (not full content)
+- Uses `after()` API for post-response background processing (Vercel timeout handling)
 
 **API Timeout Configuration:**
 | Endpoint | Timeout | Purpose |
@@ -215,6 +257,24 @@ AI-generated slides are validated before acceptance:
 | `src/store/generation.ts` | Zustand store for client-side state |
 | `src/types/slide-dsl.ts` | DSL type definitions and content limits |
 | `src/types/index.ts` | Session, outline, resource type definitions |
+| `src/lib/utils.ts` | Utility functions (`cn` for class merging) |
+
+### Zustand Store (src/store/generation.ts)
+
+Store 只存储会话 ID 列表，会话数据通过 API 获取：
+
+**Store State:**
+- `sessionIds: string[]` - localStorage 中存储的会话 ID 列表
+
+**Store Actions:**
+- `loadSessionIds()` - 从 localStorage 加载 ID 列表
+- `addSessionId(id)` - 添加会话 ID
+- `removeSessionId(id)` - 移除会话 ID
+- `clearSessionIds()` - 清空所有 ID
+
+**导出的工具函数:**
+- `fetchSession(id)` - 从服务器获取单个会话
+- `fetchSessions(ids)` - 批量获取会话数据
 
 ### UI Components
 
@@ -347,11 +407,16 @@ Each theme defines these color properties:
 
 ## AI Integration
 
-### Function Calling Tools (src/lib/ai.ts)
+### Function Calling Tool Categories (src/lib/ai.ts)
 
-The AI generates slides via function calling with two tools:
-- **`add_slide(slide: SlideDSL)`**: Adds a slide to the presentation
-- **`finish_generation()`**: Signals end of generation
+**Research Tools** (used during resource collection):
+- `search_web(query)` - Search web for relevant materials (max 5 results per search)
+- `fetch_url(url)` - Fetch full content of specific URLs
+- `finish_research(summary)` - Complete research with comprehensive summary
+
+**Slide Generation Tools** (used during content generation):
+- `add_slide(slide: SlideDSL)` - Adds a slide to the presentation
+- `finish_generation()` - Signals end of generation
 
 **Configuration:**
 - Temperature: 0.7
@@ -381,6 +446,22 @@ During function calling, AI can only generate these layouts:
 - Truncates to 5000 chars per page
 - Used to enrich search results with full page context
 
+### Scraper Details
+
+- **Blocked file types**: 30+ types (PDF, Office, media, archives, etc.)
+- **Content validation**: Only accepts `text/html` and `text/plain`
+- **Minimum content**: 100 characters threshold
+- **Batch fetching**: Configurable concurrency (default 3 concurrent requests)
+- **User-Agent**: Realistic browser header for compatibility
+
+### Search Client (src/lib/search.ts)
+
+Dual provider support with automatic fallback:
+- **Tavily** (primary): Preferred search provider, doesn't fetch raw content (delegates to scraper)
+- **SerpAPI** (fallback): Extracts organic results with full parsing
+- Configurable max results (default 5)
+- Application continues without search if no API keys configured
+
 ## Error Handling Patterns
 
 - **JSON Parsing**: Clean → Fix → Truncate → Extract → Lenient mode
@@ -389,12 +470,32 @@ During function calling, AI can only generate these layouts:
 - **Outline Fails**: Uses default template
 - **PPTX Rendering**: Block-by-block with height constraints to prevent overflow
 
+### Generator Fallback Strategy (src/lib/generator.ts)
+
+Multi-level graceful degradation:
+1. **Primary**: AI-driven research with function calling tools
+2. **Fallback 1**: Traditional search without AI research loop
+3. **Fallback 2**: Direct search if first method fails
+4. **Fallback 3**: Continue with outline even if search API unavailable
+
 ## Session Storage
 
 - Location: `.sessions/` directory (gitignored)
 - Format: JSON files named by session UUID
 - Cleanup: Sessions older than 24 hours auto-deleted on new session creation
 - Client persistence: Session IDs stored in localStorage (`ppt-creator-session-ids`)
+
+### Serverless Environment Detection
+
+Session storage auto-adapts based on environment:
+
+| Environment Variable | Platform |
+|---------------------|----------|
+| `VERCEL` | Vercel |
+| `SERVERLESS`, `AWS_LAMBDA_FUNCTION_NAME` | AWS Lambda |
+| `EDGE`, `EDGE_RUNTIME`, `TENCLOUD` | Edge computing |
+
+On serverless platforms, sessions are stored in `/tmp/.sessions` instead of `.sessions/`.
 
 ## Skills Available
 
@@ -408,9 +509,68 @@ This project includes Claude skills in `.claude/skills/`:
 ### Docker Support
 
 - **Dockerfile** and **docker-compose.yml** included
+- Multi-stage build using `node:20-alpine`
+- Non-root user (`nextjs:1001`) for security
 - Session storage adapts to serverless environments (`/tmp/.sessions`)
+- Health check with 30s interval
+- Auto-restart policy
 - Build: `docker build -t ppt-creator .`
 - Run: `docker compose up`
+
+### PM2 Deployment
+
+PM2 provides process management with automatic restarts and log rotation.
+
+**Setup:**
+```bash
+# Install PM2 globally
+npm install -g pm2
+
+# Build and start
+npm run build
+npm run pm2:start
+
+# Enable log rotation (optional)
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 10M
+pm2 set pm2-logrotate:retain 7
+
+# Auto-start on system reboot
+pm2 startup
+pm2 save
+```
+
+**Log files location:** `./logs/`
+- `out.log` - stdout
+- `error.log` - stderr
+- `combined.log` - all logs
+
+### Vercel Deployment
+
+- Uses `maxDuration = 120` on generate API (requires Vercel Pro)
+- Detects Vercel via `process.env.VERCEL`
+- Session storage auto-adapts to `/tmp/.sessions`
+- Standalone mode configured in `next.config.ts`
+
+## Documentation
+
+| File | Purpose |
+|------|---------|
+| `docs/PRD.md` | Product Requirements Document |
+| `docs/deployment.md` | Comprehensive deployment guide (20+ methods) |
+| `docs/ui/design-system.md` | UI/UX design specifications |
+
+## Testing
+
+**Note**: Project currently lacks automated test suite. No jest.config, test files, or test directory present.
+
+## Security & Performance Notes
+
+- Session IDs stored in localStorage (no encryption)
+- PPTX files generated in-memory (no disk caching)
+- No rate limiting on API endpoints
+- No authentication/authorization (open access)
+- Theme colors use hex codes without `#` prefix (PptxGenJS format)
 
 ## Key Dependencies
 
