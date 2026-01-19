@@ -1,10 +1,8 @@
-version: '3.8'
-
 services:
   ppt-creator:
     build: .
     ports:
-      - "3000:3000"
+      - '3000:3000'
     environment:
       - AI_PROVIDER=${AI_PROVIDER:-openai}
       - API_KEY=${API_KEY}
@@ -14,9 +12,10 @@ services:
       - SERP_API_KEY=${SERP_API_KEY:-}
     volumes:
       - sessions:/app/.sessions
+      - logs:/app/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000"]
+      test: ['CMD', 'wget', '-q', '--spider', 'http://localhost:3000']
       interval: 30s
       timeout: 10s
       retries: 3
