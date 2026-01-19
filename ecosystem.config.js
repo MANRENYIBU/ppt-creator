@@ -2,8 +2,13 @@ module.exports = {
   apps: [
     {
       name: 'ppt-creator',
-      script: 'node_modules/next/dist/bin/next',
-      args: 'start',
+      // Docker standalone 模式使用 server.js，本地开发使用 next start
+      script: process.env.NODE_ENV === 'production' && require('fs').existsSync('./server.js')
+        ? './server.js'
+        : 'node_modules/next/dist/bin/next',
+      args: process.env.NODE_ENV === 'production' && require('fs').existsSync('./server.js')
+        ? undefined
+        : 'start',
       cwd: './',
       instances: 1,
       autorestart: true,

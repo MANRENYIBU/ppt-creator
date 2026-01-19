@@ -22,23 +22,21 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# 创建非 root 用户
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+# 安装 PM2
+RUN npm install -g pm2
 
 # 复制必要文件
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+COPY ecosystem.config.js ./
 
 # 创建会话存储目录和日志目录
-RUN mkdir -p .sessions logs && chown -R nextjs:nodejs .sessions logs
-
-USER nextjs
+RUN mkdir -p .sessions logs
 
 EXPOSE 3000
 
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["pm2-runtime", "ecosystem.config.js"]
