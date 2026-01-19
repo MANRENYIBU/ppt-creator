@@ -11,14 +11,16 @@ services:
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - SERP_API_KEY=${SERP_API_KEY:-}
     volumes:
-      - sessions:/app/.sessions
-      - logs:/app/logs
+      - ./sessions:/app/.sessions
+      - ./logs:/app/logs
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '10m'
+        max-file: '3'
     restart: unless-stopped
     healthcheck:
       test: ['CMD', 'wget', '-q', '--spider', 'http://localhost:3000']
       interval: 30s
       timeout: 10s
       retries: 3
-
-volumes:
-  sessions:

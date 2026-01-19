@@ -31,8 +31,8 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
-# 创建会话存储目录
-RUN mkdir -p .sessions && chown -R nextjs:nodejs .sessions
+# 创建会话存储目录和日志目录
+RUN mkdir -p .sessions logs && chown -R nextjs:nodejs .sessions logs
 
 USER nextjs
 
