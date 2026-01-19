@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession, updateSessionStage } from '@/lib/session'
 import { generatePPTXFromDSL } from '@/lib/dsl-renderer'
+import { renderImagePresentation } from '@/lib/image-renderer'
 import { ThemeName } from '@/types'
 
 // Vercel 函数超时（秒），Pro 版有效
@@ -30,15 +31,21 @@ export async function POST(
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    // 检查是否有DSL内容
-    if (
-      !session.dslPresentation ||
-      session.dslPresentation.slides.length === 0
-    ) {
-      return NextResponse.json(
-        { error: 'Content not generated yet. Please call /content first.' },
-        { status: 400 },
-      )
+    // 根据模式检查内容是否已生成
+    if (session.mode === 'image') {
+      if (!session.imagePresentation || session.imagePresentation.slides.length === 0) {
+        return NextResponse.json(
+          { error: 'Image content not generated yet. Please complete generation first.' },
+          { status: 400 },
+        )
+      }
+    } else {
+      if (!session.dslPresentation || session.dslPresentation.slides.length === 0) {
+        return NextResponse.json(
+          { error: 'Content not generated yet. Please call /content first.' },
+          { status: 400 },
+        )
+      }
     }
 
     // 从请求体获取主题（优先使用请求中的主题，否则使用会话中的主题）
@@ -56,12 +63,22 @@ export async function POST(
     await updateSessionStage(id, 'exporting')
 
     try {
-      // 每次都重新渲染PPTX（使用请求中的主题或会话中的主题）
-      const downloadUrl = await generatePPTXFromDSL(
-        session.dslPresentation,
-        session.topic,
-        theme,
-      )
+      let downloadUrl: string
+
+      if (session.mode === 'image') {
+        // 图片模式：使用图片渲染器
+        downloadUrl = await renderImagePresentation(
+          session.imagePresentation!,
+          session.topic,
+        )
+      } else {
+        // DSL 模式：使用 DSL 渲染器
+        downloadUrl = await generatePPTXFromDSL(
+          session.dslPresentation!,
+          session.topic,
+          theme,
+        )
+      }
 
       // 标记完成（不存储downloadUrl，每次都重新生成）
       await updateSessionStage(id, 'completed')

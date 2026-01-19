@@ -130,6 +130,13 @@ Resource collection uses AI with function calling tools to intelligently gather 
 - Max iterations: 20 (prevents infinite loops)
 - Falls back to direct search if AI research fails
 
+**Resource Context Building Priority** (`dsl-generator.ts:388-412`):
+1. **Primary**: AI-generated summary from research phase (preferred)
+2. **Fallback**: Raw search results (max 3, `rawContent` preferred over `content`)
+3. **Last resort**: Empty string if no resources available
+
+Each raw result is truncated to 800 characters when used as fallback.
+
 **Data Model:**
 ```typescript
 interface ResourceResult {
@@ -224,6 +231,18 @@ The slide content uses a JSON-based DSL (`src/types/slide-dsl.ts`) that serves a
 | `table` | `(rows + 1) * 0.35` | 8行 = 3.15" |
 | `quote` | `max(0.5, ceil(text/45) * 0.25) + 0.1~0.35` | ≈ 0.6" |
 
+**Note:** Code blocks use smaller font (8pt vs 16pt body), allowing more content per slide.
+
+#### Content Block Splitting (dsl-parser.ts:434-533)
+
+Oversized individual blocks are split before pagination:
+
+| Block Type | Split Threshold | Split Caption |
+|------------|-----------------|---------------|
+| `code` | `MAX_CODE_LINES` (25) | `(1/N)` suffix |
+| `bullets/numbered` | `MAX_LIST_ITEMS` (8) | None |
+| `table` | `MAX_TABLE_ROWS` (8) | `(1/N)` suffix |
+
 #### DSL Parser Error Recovery
 
 The parser (`src/lib/dsl-parser.ts`) handles malformed AI output:
@@ -233,12 +252,45 @@ The parser (`src/lib/dsl-parser.ts`) handles malformed AI output:
 4. Falls back to Markdown table parsing
 5. Lenient mode normalizes invalid structures
 
+#### Lenient Mode Normalization (dsl-parser.ts:704-840)
+
+The `normalizeContentBlock()` function handles various AI output formats:
+
+| Block Type | Accepted Fields | Fallback Fields |
+|------------|-----------------|-----------------|
+| `code` | `lines[]` | `code`, `content`, `text` (split by `\n`) |
+| `code.language` | `language` | `lang` |
+| `table` | `headers[]`, `rows[][]` | `data[][]`, Markdown table in `text` |
+| `quote` | `text` | `content` |
+
+Auto-generates column headers if missing: `列1`, `列2`, etc.
+
 #### Content Block Validation (dsl-generator.ts)
 
 AI-generated slides are validated before acceptance:
 - Only 6 valid content block types: `paragraph`, `bullets`, `numbered`, `code`, `table`, `quote`
 - Invalid types trigger re-generation request via tool feedback
 - Validates `content`, `leftContent`, `rightContent` arrays
+
+#### Section Generation Requirements (dsl-generator.ts:317-320)
+
+Per-section slide generation enforces:
+- **Maximum 6 slides per section** (hardcoded in prompt)
+- Content types should be diverse (not all bullets)
+- Code blocks and tables should preferably have their own slides
+- Technical topics must include complete code examples
+
+#### Slide Structure Auto-Generated
+
+The `generateDSLPresentation()` function creates these slides automatically:
+
+| Slide | Layout | Content |
+|-------|--------|---------|
+| 1 | `title-only` | Topic title + "Professional Presentation · AI Generated" |
+| 2 | `title-content` | "Contents" + numbered list of section titles |
+| Per Section | `section` | Section title + "Part X of Y" |
+| Per Section | (AI generated) | Content slides (max 6 per section) |
+| Last | `title-only` | "Thank You" + "Questions & Discussion" |
 
 ### Key Files
 
@@ -405,6 +457,26 @@ Each theme defines these color properties:
 - **Column gap**: 0.3 inches
 - **Fonts**: Microsoft YaHei (title/body), Consolas (code)
 
+### Layout Rendering Details
+
+**Two-Column Layout** (`dsl-renderer.ts`):
+```
+columnWidth = (10 - 0.5*2 - 0.3) / 2 = 4.35" per column
+```
+
+**Comparison Layout Color Scheme**:
+- Left column header: `primary` color background
+- Right column header: `secondary` color background
+- Header bars positioned 0.05" above content area
+
+### Fallback Slide Generation (dsl-generator.ts:417-443)
+
+When function calling fails, generates simple slides:
+- One slide per outline point
+- Layout: `title-content`
+- Content: Boilerplate paragraph + placeholder bullet list
+- Localized for Chinese/English
+
 ## AI Integration
 
 ### Function Calling Tool Categories (src/lib/ai.ts)
@@ -417,6 +489,11 @@ Each theme defines these color properties:
 **Slide Generation Tools** (used during content generation):
 - `add_slide(slide: SlideDSL)` - Adds a slide to the presentation
 - `finish_generation()` - Signals end of generation
+
+**Tool Response Truncation** (`ai.ts`):
+- Search results: snippets truncated to 500 chars in tool response
+- Fetched content: truncated to 3000 chars in tool response
+- Raw content stored in full for later use
 
 **Configuration:**
 - Temperature: 0.7
@@ -470,13 +547,41 @@ Dual provider support with automatic fallback:
 - **Outline Fails**: Uses default template
 - **PPTX Rendering**: Block-by-block with height constraints to prevent overflow
 
+### JSON Repair Strategy (safeParseToolArgs in ai.ts)
+
+Multi-level fallback for malformed AI-generated JSON:
+
+| Level | Action | Code Location |
+|-------|--------|---------------|
+| 1 | Direct `JSON.parse()` attempt | `ai.ts:34-37` |
+| 2 | Remove trailing commas: `,(\s*[}\]])` → `$1` | `ai.ts:43` |
+| 3 | Fix unescaped newlines/tabs in strings | `ai.ts:46-51` |
+| 4 | Truncate to last complete `}` brace | `ai.ts:61-68` |
+| 5 | Extract JSON-like pattern via regex | `ai.ts:72-78` |
+
+### Validation Feedback Loop (Function Calling)
+
+When AI generates invalid content block types during function calling:
+
+1. `onSlideAdded` callback validates each slide (`dsl-generator.ts:345-354`)
+2. Invalid slides receive error tool response: `"Invalid content block types detected..."` (`ai.ts:345-354`)
+3. AI receives feedback and regenerates the slide
+4. Process repeats until valid or max iterations (50) reached
+
+### DSL Parser Bracket Counting Algorithm (dsl-parser.ts:55-115)
+
+For truncated JSON repair:
+- Tracks `bracketCount` (for `[]`) and `braceCount` (for `{}`)
+- Handles escape characters (`\`) and string boundaries (`"`)
+- Records position of last complete object when `braceCount` returns to 0
+- Truncates at that position and appends `]}`
+
 ### Generator Fallback Strategy (src/lib/generator.ts)
 
 Multi-level graceful degradation:
 1. **Primary**: AI-driven research with function calling tools
-2. **Fallback 1**: Traditional search without AI research loop
-3. **Fallback 2**: Direct search if first method fails
-4. **Fallback 3**: Continue with outline even if search API unavailable
+2. **Fallback**: Traditional search (`collectResourcesFallback`) if AI research fails
+3. **Skip**: If no search API configured, returns null and continues with outline
 
 ## Session Storage
 
@@ -484,6 +589,24 @@ Multi-level graceful degradation:
 - Format: JSON files named by session UUID
 - Cleanup: Sessions older than 24 hours auto-deleted on new session creation
 - Client persistence: Session IDs stored in localStorage (`ppt-creator-session-ids`)
+
+### Session Cleanup Mechanism (session.ts:177-192)
+
+- Triggered in `/api/session/create` route after session creation
+- Uses `session.createdAt` field from JSON to determine age (not file mtime)
+- Silently runs in background (uses `.catch(console.error)`)
+- Does not throw errors on cleanup failure
+
+### Console Logging Patterns
+
+The codebase uses consistent logging prefixes:
+
+| Prefix | Source | Purpose |
+|--------|--------|---------|
+| `[DSL Generator]` | `dsl-generator.ts` | Slide generation progress |
+| `[DSL Parser]` | `dsl-parser.ts` | JSON repair and pagination |
+| `[AI]` | `ai.ts` | Slide function calling |
+| `[AI Research]` | `ai.ts` | Research function calling |
 
 ### Serverless Environment Detection
 
@@ -559,6 +682,45 @@ pm2 save
 | `docs/PRD.md` | Product Requirements Document |
 | `docs/deployment.md` | Comprehensive deployment guide (20+ methods) |
 | `docs/ui/design-system.md` | UI/UX design specifications |
+
+## API Routes
+
+| Route | Method | File | Purpose |
+|-------|--------|------|---------|
+| `/api/session/create` | POST | `src/app/api/session/create/route.ts` | Create new session |
+| `/api/session/[id]` | GET | `src/app/api/session/[id]/route.ts` | Get session by ID |
+| `/api/session/[id]/generate` | POST | `src/app/api/session/[id]/generate/route.ts` | Unified generation (recommended) |
+| `/api/session/[id]/collect` | POST | `src/app/api/session/[id]/collect/route.ts` | Resource collection (legacy) |
+| `/api/session/[id]/outline` | POST | `src/app/api/session/[id]/outline/route.ts` | Outline generation (legacy) |
+| `/api/session/[id]/content` | POST | `src/app/api/session/[id]/content/route.ts` | Content generation (legacy) |
+| `/api/session/[id]/export` | POST | `src/app/api/session/[id]/export/route.ts` | PPTX export |
+
+### Generate API Response Format
+
+The `/api/session/[id]/generate` endpoint returns a simplified response (not full session):
+```typescript
+interface GenerateResponse {
+  id: string
+  topic: string
+  language: 'zh-CN' | 'en-US'
+  stage: GenerationStage
+  processing: boolean
+  error?: string
+  resources: {
+    count: number
+    items: Array<{ title: string; url: string }>  // First 5 only
+  }
+  outline: Array<{ title: string }>  // Summary only
+  hasContent: boolean
+}
+```
+
+## Singleton Patterns
+
+| Module | Instance Variable | Reset Function |
+|--------|-------------------|----------------|
+| `ai.ts` | `aiClient` | `resetAIClient()` |
+| `search.ts` | `searchClient` | `resetSearchClient()` |
 
 ## Testing
 

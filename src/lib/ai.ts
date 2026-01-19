@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import { getAIConfig } from './config'
+import { getAIConfig, getImageConfig, ImageConfig } from './config'
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant'
@@ -586,8 +586,69 @@ class AIClient {
   }
 }
 
+class ImagesClient {
+  private imageConfig: ImageConfig
+
+  constructor() {
+    this.imageConfig = getImageConfig()
+  }
+
+  async generateSlideImageByFetch(
+    prompt: string,
+    images?: string[],
+  ): Promise<string> {
+    console.log(
+      `[Image Generator] Calling AI with prompt length: ${prompt.length}`,
+    )
+
+    let requestBody: any = {
+      model: this.imageConfig.model,
+      prompt: prompt,
+      size: '2560x1440',
+      response_format: 'b64_json',
+      watermark: false,
+    }
+    // 添加旧图片
+    if (images && images.length > 0) {
+      requestBody = {
+        image: images,
+        ...requestBody,
+      }
+    }
+
+    const response = await fetch(this.imageConfig.baseUrl || '', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.imageConfig.apiKey}`,
+      },
+      body: JSON.stringify(requestBody),
+      signal: AbortSignal.timeout(60000), // 1分钟
+    })
+
+    const result = await response.json()
+
+    if (result.error) {
+      throw new Error(
+        `Image Generated Error ${result.error.code}:${result.error.message}`,
+      )
+    }
+
+    const imageUrl: string = result.data[0]?.b64_json
+
+    if (!imageUrl) {
+      throw new Error(`No image generated ${result.data[0]}`)
+    }
+
+    console.log(`[Image Generator] base64 length:${imageUrl.length}`)
+
+    return imageUrl
+  }
+}
+
 // 单例模式
 let aiClient: AIClient | null = null
+let imageClient: ImagesClient | null = null
 
 export function getAIClient(): AIClient {
   if (!aiClient) {
@@ -596,9 +657,20 @@ export function getAIClient(): AIClient {
   return aiClient
 }
 
+export function getImageClient(): ImagesClient {
+  if (!imageClient) {
+    imageClient = new ImagesClient()
+  }
+  return imageClient
+}
+
 /**
  * 重置客户端（用于配置更改后）
  */
 export function resetAIClient(): void {
   aiClient = null
+}
+
+export function resetImageClient(): void {
+  imageClient = null
 }

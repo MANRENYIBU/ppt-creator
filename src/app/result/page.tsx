@@ -78,6 +78,15 @@ function ResultContent() {
   }
 
   const isZh = session.language === 'zh-CN'
+  const isImageMode = session.mode === 'image'
+
+  // 根据模式获取幻灯片数量
+  const slideCount = isImageMode
+    ? session.imagePresentation?.slides?.length || 0
+    : session.dslPresentation?.slides?.length || 0
+
+  // 根据模式判断是否可下载
+  const canDownload = slideCount > 0
 
   const handleDownload = async () => {
     if (!sessionId) return
@@ -168,50 +177,57 @@ function ResultContent() {
               </div>
 
               {/* 幻灯片数量 */}
-              {session.dslPresentation?.slides?.length && (
+              {slideCount > 0 && (
                 <p className="mb-4 text-sm text-gray-500">
                   {isZh
-                    ? `共 ${session.dslPresentation.slides.length} 张幻灯片`
-                    : `${session.dslPresentation.slides.length} slides total`}
+                    ? `共 ${slideCount} 张幻灯片`
+                    : `${slideCount} slides total`}
+                  {isImageMode && (
+                    <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">
+                      {isZh ? '图片模式' : 'Image Mode'}
+                    </span>
+                  )}
                 </p>
               )}
 
-              {/* 主题颜色选择 */}
-              <div className="mb-6 space-y-3">
-                <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-                  <Palette className="h-4 w-4 text-green-600" />
-                  {isZh ? '选择主题颜色' : 'Choose Theme Color'}
+              {/* 主题颜色选择 - 仅标准模式显示 */}
+              {!isImageMode && (
+                <div className="mb-6 space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    <Palette className="h-4 w-4 text-green-600" />
+                    {isZh ? '选择主题颜色' : 'Choose Theme Color'}
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {THEMES.map((t) => (
+                      <button
+                        key={t.name}
+                        type="button"
+                        onClick={() => setSelectedTheme(t.name)}
+                        className={`group relative flex flex-col items-center gap-1.5 rounded-lg border-2 p-2 transition-all ${
+                          selectedTheme === t.name
+                            ? 'border-gray-900 bg-gray-50'
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
+                        }`}
+                      >
+                        <div
+                          className="h-6 w-6 rounded-full shadow-sm ring-2 ring-white"
+                          style={{ backgroundColor: t.color }}
+                        />
+                        <span className="text-xs text-gray-600">
+                          {isZh ? t.label : t.labelEn}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {THEMES.map((t) => (
-                    <button
-                      key={t.name}
-                      type="button"
-                      onClick={() => setSelectedTheme(t.name)}
-                      className={`group relative flex flex-col items-center gap-1.5 rounded-lg border-2 p-2 transition-all ${
-                        selectedTheme === t.name
-                          ? 'border-gray-900 bg-gray-50'
-                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
-                      }`}
-                    >
-                      <div
-                        className="h-6 w-6 rounded-full shadow-sm ring-2 ring-white"
-                        style={{ backgroundColor: t.color }}
-                      />
-                      <span className="text-xs text-gray-600">
-                        {isZh ? t.label : t.labelEn}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
+              )}
 
               {/* 下载按钮 */}
               <Button
                 size="lg"
                 className="h-12 w-full bg-gradient-to-r from-green-500 to-emerald-600 text-base font-medium shadow-lg shadow-green-600/25 transition-all duration-200 hover:shadow-xl hover:shadow-green-600/30"
                 onClick={handleDownload}
-                disabled={downloading || !session.dslPresentation}
+                disabled={downloading || !canDownload}
               >
                 {downloading ? (
                   <>

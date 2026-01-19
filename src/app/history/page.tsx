@@ -172,7 +172,11 @@ export default function HistoryPage() {
             {sessions.map((session) => {
               const isZh = session.language === 'zh-CN'
               const isCompleted = session.stage === 'completed'
-              const canDownload = !!session.dslPresentation?.slides?.length
+              const isImageMode = session.mode === 'image'
+              // 根据模式判断是否可下载
+              const canDownload = isImageMode
+                ? !!session.imagePresentation?.slides?.length
+                : !!session.dslPresentation?.slides?.length
 
               return (
                 <div
@@ -210,6 +214,16 @@ export default function HistoryPage() {
                         <span className="flex items-center gap-1">
                           <Globe className="h-3.5 w-3.5" />
                           {isZh ? '中文' : 'English'}
+                        </span>
+                        {/* 模式标签 */}
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs ${
+                            isImageMode
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-gray-100 text-gray-600'
+                          }`}
+                        >
+                          {isImageMode ? '图片模式' : '标准模式'}
                         </span>
                         <span
                           className={`rounded-full px-2 py-0.5 text-xs ${

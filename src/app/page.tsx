@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, Zap, Globe, Loader2 } from 'lucide-react';
+import { Sparkles, Zap, Globe, Loader2, Image, FileText, Palette } from 'lucide-react';
 import { Header } from '@/components/header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useGenerationStore } from '@/store/generation';
-import { GenerationSession } from '@/types';
+import { GenerationSession, GenerationMode, ThemeName } from '@/types';
+
+// 主题配置
+const THEMES: { name: ThemeName; label: string; color: string }[] = [
+  { name: 'blue', label: '专业蓝', color: '#2563EB' },
+  { name: 'green', label: '清新绿', color: '#16A34A' },
+  { name: 'teal', label: '科技青', color: '#0D9488' },
+  { name: 'purple', label: '优雅紫', color: '#9333EA' },
+  { name: 'orange', label: '活力橙', color: '#EA580C' },
+  { name: 'red', label: '醒目红', color: '#DC2626' },
+  { name: 'rose', label: '温暖粉', color: '#E11D48' },
+  { name: 'slate', label: '简约灰', color: '#475569' },
+];
 
 export default function HomePage() {
   const router = useRouter();
@@ -22,6 +34,8 @@ export default function HomePage() {
 
   const [topic, setTopic] = useState('');
   const [language, setLanguage] = useState<'zh-CN' | 'en-US'>('zh-CN');
+  const [mode, setMode] = useState<GenerationMode>('dsl');
+  const [theme, setTheme] = useState<ThemeName>('blue');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,11 +47,16 @@ export default function HomePage() {
     setError(null);
 
     try {
-      // 先创建会话
+      // 先创建会话（图片模式需要传递主题）
       const response = await fetch('/api/session/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic: topic.trim(), language }),
+        body: JSON.stringify({
+          topic: topic.trim(),
+          language,
+          mode,
+          theme: mode === 'image' ? theme : undefined,
+        }),
       });
 
       if (!response.ok) {
@@ -134,6 +153,78 @@ export default function HomePage() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* 生成模式选择 */}
+                <div className="space-y-2 text-left">
+                  <label htmlFor="mode" className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                    {mode === 'image' ? (
+                      <Image className="h-4 w-4 text-blue-500" />
+                    ) : (
+                      <FileText className="h-4 w-4 text-blue-500" />
+                    )}
+                    生成模式
+                  </label>
+                  <Select
+                    value={mode}
+                    onValueChange={(v) => setMode(v as GenerationMode)}
+                  >
+                    <SelectTrigger id="mode" className="h-12 border-gray-200 bg-gray-50/50">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="dsl">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-4 w-4" />
+                          <span>标准模式</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="image">
+                        <div className="flex items-center gap-2">
+                          <Image className="h-4 w-4" />
+                          <span>图片模式</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-400">
+                    {mode === 'image'
+                      ? '使用 AI 生成完整幻灯片图片'
+                      : '使用结构化内容生成 PPT（可在下载时选择主题）'}
+                  </p>
+                </div>
+
+                {/* 主题颜色选择 - 仅图片模式显示 */}
+                {mode === 'image' && (
+                  <div className="space-y-2 text-left">
+                    <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                      <Palette className="h-4 w-4 text-blue-500" />
+                      主题风格
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {THEMES.map((t) => (
+                        <button
+                          key={t.name}
+                          type="button"
+                          onClick={() => setTheme(t.name)}
+                          className={`group relative flex flex-col items-center gap-1.5 rounded-lg border-2 p-2 transition-all ${
+                            theme === t.name
+                              ? 'border-blue-500 bg-blue-50'
+                              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50/50'
+                          }`}
+                        >
+                          <div
+                            className="h-5 w-5 rounded-full shadow-sm ring-2 ring-white"
+                            style={{ backgroundColor: t.color }}
+                          />
+                          <span className="text-xs text-gray-600">{t.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      图片模式的主题在生成时确定，无法更改
+                    </p>
+                  </div>
+                )}
 
                 {/* 错误提示 */}
                 {error && (

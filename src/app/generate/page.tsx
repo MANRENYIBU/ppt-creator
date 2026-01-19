@@ -24,6 +24,7 @@ interface GenerateResponse {
   id: string
   topic: string
   language: 'zh-CN' | 'en-US'
+  mode: 'dsl' | 'image'
   stage: GenerationStage
   processing?: boolean
   error?: string
@@ -64,7 +65,7 @@ const STAGES: StageConfig[] = [
 ]
 
 // 轮询配置
-const POLL_INTERVAL = 5000 // 5秒轮询一次
+const POLL_INTERVAL = 2000 // 2秒轮询一次
 const MAX_POLL_TIME = 3600000 // 最大轮询时间 60 分钟
 
 function GenerateContent() {
@@ -78,6 +79,7 @@ function GenerateContent() {
   const [session, setSession] = useState<GenerateResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
+  const initRef = useRef<boolean>(false)
 
   // Refs
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
@@ -244,49 +246,14 @@ function GenerateContent() {
       router.replace('/')
       return
     }
-
-    // 立即开始生成流程
-    const startGenerationFlow = async () => {
-      try {
-        setIsGenerating(true)
-        startTimeRef.current = Date.now()
-
-        // 调用 generate API 启动处理
-        const response = await fetch(`/api/session/${sessionId}/generate`, {
-          method: 'POST',
-        })
-        if (!response.ok) {
-          const data = await response.json().catch(() => ({}))
-          setError(data.error || 'Failed to start generation')
-          setIsGenerating(false)
-          return
-        }
-        const s: GenerateResponse = await response.json()
-        setSession(s)
-
-        // 如果已完成，直接跳转到结果页
-        if (s.stage === 'completed') {
-          router.replace(`/result?id=${s.id}`)
-          return
-        }
-
-        // 如果出错，停止
-        if (s.stage === 'error') {
-          setError(s.error || 'Generation failed')
-          setIsGenerating(false)
-          return
-        }
-
-        // 开始轮询
-        startPolling()
-      } catch {
-        setError('Failed to start generation')
-        setIsGenerating(false)
-      }
+    if (initRef.current) {
+      return
     }
+    initRef.current = true
 
-    startGenerationFlow()
-  }, [sessionId, router, startPolling])
+    // 复用 startGeneration 逻辑
+    startGeneration()
+  }, [sessionId, router, startGeneration])
 
   // 跳转到结果页
   useEffect(() => {

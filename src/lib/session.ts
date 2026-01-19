@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import path from 'path';
-import { GenerationSession, GenerationStage, ThemeName } from '@/types';
+import { GenerationSession, GenerationStage, GenerationMode, ThemeName } from '@/types';
 
 // 会话存储目录
 // Vercel 等无服务器环境只有 /tmp 可写
@@ -45,6 +45,7 @@ export async function createSession(
   id: string,
   topic: string,
   language: 'zh-CN' | 'en-US',
+  mode: GenerationMode = 'dsl',
   theme?: ThemeName
 ): Promise<GenerationSession> {
   await ensureDir();
@@ -53,6 +54,7 @@ export async function createSession(
     id,
     topic,
     language,
+    mode,
     theme,
     stage: 'idle',
     createdAt: new Date().toISOString(),

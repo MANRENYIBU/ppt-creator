@@ -14,6 +14,12 @@ export interface SearchConfig {
   apiKey: string;
 }
 
+export interface ImageConfig {
+  baseUrl?: string;
+  apiKey: string;
+  model: string;
+}
+
 /**
  * 获取AI服务配置
  */
@@ -30,6 +36,26 @@ export function getAIConfig(): AIConfig {
 
   return {
     provider,
+    baseUrl: baseUrl || undefined,
+    apiKey,
+    model,
+  };
+}
+
+/**
+ * 获取图像生成服务配置
+ * 优先使用 IMAGE_* 环境变量，否则回退到 AI 配置
+ */
+export function getImageConfig(): ImageConfig {
+  const baseUrl = process.env.IMAGE_BASE_URL || process.env.BASE_URL;
+  const apiKey = process.env.IMAGE_API_KEY || process.env.API_KEY;
+  const model = process.env.IMAGE_MODEL || 'gemini-2.0-flash-exp-image-generation';
+
+  if (!apiKey) {
+    throw new Error('IMAGE_API_KEY or API_KEY is required for image generation');
+  }
+
+  return {
     baseUrl: baseUrl || undefined,
     apiKey,
     model,

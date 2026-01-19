@@ -3,6 +3,7 @@ import { after } from 'next/server'
 import { getSession, updateSession } from '@/lib/session'
 import { collectResources, generateOutline } from '@/lib/generator'
 import { generateDSLPresentation } from '@/lib/dsl-generator'
+import { generateImagePresentation } from '@/lib/image-generator'
 import { GenerationStage, GenerationSession } from '@/types'
 
 // Vercel 函数超时（秒）
@@ -15,6 +16,7 @@ interface GenerateResponse {
   id: string
   topic: string
   language: 'zh-CN' | 'en-US'
+  mode: 'dsl' | 'image'
   stage: GenerationStage
   processing?: boolean
   error?: string
@@ -25,7 +27,7 @@ interface GenerateResponse {
   }
   // 大纲预览
   outline?: Array<{ title: string }>
-  // 内容是否已生成（不返回完整 DSL）
+  // 内容是否已生成（不返回完整 DSL 或图片）
   hasContent?: boolean
 }
 
@@ -33,10 +35,16 @@ interface GenerateResponse {
  * 将完整 session 转换为精简响应
  */
 function toResponse(session: GenerationSession): GenerateResponse {
+  // 根据模式判断内容是否已生成
+  const hasContent = session.mode === 'image'
+    ? !!(session.imagePresentation && session.imagePresentation.slides.length > 0)
+    : !!(session.dslPresentation && session.dslPresentation.slides.length > 0)
+
   return {
     id: session.id,
     topic: session.topic,
     language: session.language,
+    mode: session.mode,
     stage: session.stage,
     processing: session.processing,
     error: session.error,
@@ -48,7 +56,7 @@ function toResponse(session: GenerationSession): GenerateResponse {
       })),
     } : undefined,
     outline: session.outline?.map(item => ({ title: item.title })),
-    hasContent: !!(session.dslPresentation && session.dslPresentation.slides.length > 0),
+    hasContent,
   }
 }
 
@@ -75,13 +83,38 @@ export async function POST(
       return NextResponse.json({ error: 'Session not found' }, { status: 404 })
     }
 
-    // 如果已完成或出错，直接返回
+    // 如果已完成，直接返回
     if (session.stage === 'completed') {
       return NextResponse.json(toResponse(session))
     }
 
+    // 如果出错，重置状态以支持重试
     if (session.stage === 'error') {
-      return NextResponse.json(toResponse(session))
+      // 根据已有数据决定从哪个阶段重新开始
+      let retryStage: GenerationStage = 'collecting'
+      if (session.outline && session.outline.length > 0) {
+        retryStage = 'generating'
+      } else if (session.resources) {
+        retryStage = 'outlining'
+      }
+
+      // 重置错误状态
+      await updateSession(id, {
+        stage: retryStage,
+        error: undefined,
+        processing: false,
+      })
+
+      // 重新获取 session 并继续处理
+      const resetSession = await getSession(id)
+      if (!resetSession) {
+        return NextResponse.json({ error: 'Session not found' }, { status: 404 })
+      }
+
+      // 继续下面的正常流程
+      session.stage = resetSession.stage
+      session.error = resetSession.error
+      session.processing = resetSession.processing
     }
 
     // 如果正在处理中，直接返回当前状态（避免重复处理）
@@ -149,9 +182,15 @@ function getNextStage(session: Awaited<ReturnType<typeof getSession>>): Generati
       }
       return null // 还在生成大纲
     case 'generating':
-      // 如果内容已生成，标记完成
-      if (session.dslPresentation && session.dslPresentation.slides.length > 0) {
-        return 'completed'
+      // 根据模式判断内容是否已生成
+      if (session.mode === 'image') {
+        if (session.imagePresentation && session.imagePresentation.slides.length > 0) {
+          return 'completed'
+        }
+      } else {
+        if (session.dslPresentation && session.dslPresentation.slides.length > 0) {
+          return 'completed'
+        }
       }
       return null // 还在生成内容
     default:
@@ -199,17 +238,33 @@ async function executeStage(
         throw new Error('Outline not found')
       }
 
-      const dslPresentation = await generateDSLPresentation(
-        currentSession.topic,
-        currentSession.outline,
-        currentSession.language,
-        currentSession.resources || null,
-      )
-      await updateSession(id, {
-        dslPresentation,
-        processing: false,
-        // 保持 generating 状态，下次轮询会检测到 dslPresentation 并进入 completed
-      })
+      // 根据模式选择不同的生成器
+      if (currentSession.mode === 'image') {
+        // 图片模式：使用工具调用生成图片
+        const imagePresentation = await generateImagePresentation(
+          currentSession.outline,
+          currentSession.topic,
+          currentSession.language,
+          currentSession.theme || 'blue',
+          currentSession.resources || undefined,
+        )
+        await updateSession(id, {
+          imagePresentation,
+          processing: false,
+        })
+      } else {
+        // DSL 模式：现有逻辑
+        const dslPresentation = await generateDSLPresentation(
+          currentSession.topic,
+          currentSession.outline,
+          currentSession.language,
+          currentSession.resources || null,
+        )
+        await updateSession(id, {
+          dslPresentation,
+          processing: false,
+        })
+      }
       break
     }
 

@@ -178,11 +178,12 @@ ${DSL_SCHEMA_SPEC}
 3. 每张幻灯片必须有 title 字段
 4. 内容块类型只能是：paragraph、bullets、numbered、code、table、quote
 5. 数据对比请使用 table 内容块，不要发明新的内容块类型
+6. 每个章节最多生成6张幻灯片，内容要精炼
 
 ## 排版建议
 1. 代码块建议独占一张幻灯片
 2. 表格建议独占一张幻灯片
-3. 内容可以充分展开，系统会自动处理分页
+3. 内容要简洁精炼，突出重点
 
 ## 内容质量要求
 1. 内容类型多样化，不要全是bullets
@@ -205,11 +206,12 @@ ${DSL_SCHEMA_SPEC}
 3. Every slide MUST have a title field
 4. Content block types can ONLY be: paragraph, bullets, numbered, code, table, quote
 5. For data comparison, use the table content block - do not invent new content block types
+6. Generate at most 6 slides per section, keep content concise
 
 ## Layout Suggestions
 1. Code blocks should preferably be on their own slide
 2. Tables should preferably be on their own slide
-3. Content can be fully expanded - the system will handle pagination automatically
+3. Keep content concise and highlight key points
 
 ## Content Quality Requirements
 1. Diversify content types, avoid all bullets
@@ -307,12 +309,12 @@ async function generateSectionDSL(
 
 当前章节（第${sectionIndex}/${totalSections}部分）：${section.title}
 
-本章节的核心要点（每个要点都需要充分展开讲解）：
+本章节的核心要点：
 ${section.points.map((p, i) => `${i + 1}. ${p}`).join('\n')}
 ${resourceContext ? `\n参考资料：\n${resourceContext}` : ''}
 
 请使用 add_slide 工具为这个章节生成幻灯片。要求：
-1. 每个要点至少2-3张幻灯片来详细展开
+1. 本章节最多生成6张幻灯片，内容要精炼
 2. 使用多种内容类型（段落、列表、代码、表格、引用）
 3. 代码块和表格建议独占一张幻灯片
 4. 完成后调用 finish_generation 工具`
@@ -320,12 +322,12 @@ ${resourceContext ? `\n参考资料：\n${resourceContext}` : ''}
 
 Current Section (Part ${sectionIndex}/${totalSections}): ${section.title}
 
-Core Points (each needs thorough expansion):
+Core Points:
 ${section.points.map((p, i) => `${i + 1}. ${p}`).join('\n')}
 ${resourceContext ? `\nReference Materials:\n${resourceContext}` : ''}
 
 Use the add_slide tool to generate slides for this section. Requirements:
-1. At least 2-3 slides per point for detailed explanation
+1. Generate at most 6 slides for this section, keep content concise
 2. Use diverse content types (paragraphs, lists, code, tables, quotes)
 3. Code blocks and tables should have their own slides
 4. Call finish_generation tool when done`

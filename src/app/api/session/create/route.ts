@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
-import { GenerateRequest, ThemeName } from '@/types';
+import { GenerateRequest, ThemeName, GenerationMode } from '@/types';
 import { validateConfig } from '@/lib/config';
 import { createSession, cleanupOldSessions } from '@/lib/session';
 
 // 有效的主题名称
 const VALID_THEMES: ThemeName[] = ['blue', 'green', 'purple', 'orange', 'red', 'slate', 'teal', 'rose'];
+
+// 有效的生成模式
+const VALID_MODES: GenerationMode[] = ['dsl', 'image'];
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,7 +22,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body: GenerateRequest = await request.json();
-    const { topic, language, theme } = body;
+    const { topic, language, mode, theme } = body;
 
     // 参数验证
     if (!topic || !language) {
@@ -43,6 +46,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // 验证模式（可选，默认 'dsl'）
+    const validMode: GenerationMode = mode && VALID_MODES.includes(mode) ? mode : 'dsl';
+
     // 验证主题（可选）
     const validTheme = theme && VALID_THEMES.includes(theme) ? theme : undefined;
 
@@ -51,7 +57,7 @@ export async function POST(request: NextRequest) {
 
     // 创建新会话
     const sessionId = uuidv4();
-    const session = await createSession(sessionId, topic, language, validTheme);
+    const session = await createSession(sessionId, topic, language, validMode, validTheme);
 
     return NextResponse.json(session);
   } catch (error) {
