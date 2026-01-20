@@ -5,6 +5,9 @@
 ## 功能特性
 
 - **智能生成**：输入主题、选择语言，AI 自动生成 PPT
+- **双模式支持**：
+  - **DSL 模式**（默认）：AI 生成结构化内容，渲染为 PPT
+  - **图片模式**：AI 直接生成幻灯片图片，每张图片全屏展示
 - **联网搜索**：实时搜索相关资料，确保内容准确专业
 - **多语言支持**：支持中文和英文生成
 - **主题选择**：8 种配色主题可选
@@ -16,7 +19,8 @@
 - **框架**: Next.js 16.1.2 (App Router) + React 19.2.3
 - **UI**: Tailwind CSS 4 + shadcn/ui
 - **状态管理**: Zustand 5.x
-- **AI**: OpenAI SDK / Anthropic SDK（支持 OpenAI 兼容 API）
+- **AI**: OpenAI SDK（支持 OpenAI 兼容 API）
+- **图片生成**: Gemini API（用于图片模式）
 - **联网搜索**: Tavily API / SerpAPI
 - **PPT 生成**: PptxGenJS 4.x
 - **语言**: TypeScript
@@ -41,20 +45,19 @@ cp .env.example .env
 
 ```env
 # ===== AI 服务配置 =====
-# 模型提供商: openai 或 anthropic
 AI_PROVIDER=openai
-# 请求地址（可选，用于 OpenAI 兼容 API）
-BASE_URL=https://api.deepseek.com
-# API 密钥
+BASE_URL=https://api.deepseek.com    # 可选，用于 OpenAI 兼容 API
 API_KEY=your_api_key
-# 模型名称
 MODEL=deepseek-reasoner
 
+# ===== 图片生成配置（图片模式使用）=====
+IMAGE_BASE_URL=                      # 可选，默认使用 BASE_URL
+IMAGE_API_KEY=                       # 可选，默认使用 API_KEY
+IMAGE_MODEL=gemini-2.0-flash-exp-image-generation
+
 # ===== 联网搜索配置（二选一）=====
-# Tavily Search API（推荐）- https://tavily.com/
-TAVILY_API_KEY=your_tavily_key
-# SerpAPI - https://serpapi.com/
-SERP_API_KEY=your_serp_key
+TAVILY_API_KEY=your_tavily_key       # Tavily（推荐）
+SERP_API_KEY=your_serp_key           # SerpAPI
 ```
 
 ### 启动开发服务器
@@ -69,67 +72,32 @@ npm run dev
 
 ### Docker 部署（推荐）
 
-1. 创建 `.env` 文件并填入配置
-
-2. 构建并启动：
-
 ```bash
+# 构建并启动
 docker compose up -d --build
-```
 
-3. 查看日志：
-
-```bash
-# 实时日志
-docker exec -it ppt-creator-ppt-creator-1 tail -f /app/logs/combined.log
-
-# 或使用 Docker 日志
+# 查看日志
 docker logs -f ppt-creator-ppt-creator-1
-```
 
-4. 停止服务：
-
-```bash
+# 停止服务
 docker compose down
 ```
 
 ### PM2 部署
 
-1. 安装 PM2：
-
 ```bash
+# 安装 PM2
 npm install -g pm2
-```
 
-2. 构建并启动：
-
-```bash
+# 构建并启动
 npm run build
 npm run pm2:start
-```
 
-3. 常用命令：
-
-```bash
+# 常用命令
 npm run pm2:logs     # 查看日志
 npm run pm2:status   # 查看状态
 npm run pm2:restart  # 重启服务
 npm run pm2:stop     # 停止服务
-```
-
-4. 开机自启（可选）：
-
-```bash
-pm2 startup
-pm2 save
-```
-
-5. 日志轮转（可选）：
-
-```bash
-pm2 install pm2-logrotate
-pm2 set pm2-logrotate:max_size 10M
-pm2 set pm2-logrotate:retain 7
 ```
 
 ### 手动部署
@@ -149,46 +117,36 @@ ppt-creator/
 │   │   ├── generate/           # 生成页 - 进度显示
 │   │   ├── result/             # 结果页 - 主题选择与下载
 │   │   ├── history/            # 历史页 - 记录列表
-│   │   └── api/                # API 路由
-│   │       └── session/        # 会话相关 API
+│   │   └── api/session/        # 会话 API
 │   ├── components/             # React 组件
-│   │   ├── header.tsx          # 顶部导航
-│   │   └── ui/                 # shadcn/ui 组件
 │   ├── lib/                    # 核心逻辑
-│   │   ├── ai.ts               # AI 客户端
+│   │   ├── ai.ts               # AI 客户端（AIClient, ImagesClient）
 │   │   ├── session.ts          # 会话管理
 │   │   ├── search.ts           # 搜索客户端
-│   │   ├── scraper.ts          # 网页抓取
 │   │   ├── generator.ts        # 大纲生成
-│   │   ├── dsl-generator.ts    # DSL 生成
-│   │   ├── dsl-parser.ts       # DSL 解析
-│   │   └── dsl-renderer.ts     # PPTX 渲染
+│   │   ├── dsl-generator.ts    # DSL 模式 - 内容生成
+│   │   ├── dsl-parser.ts       # DSL 模式 - 解析验证
+│   │   ├── dsl-renderer.ts     # DSL 模式 - PPTX 渲染
+│   │   ├── image-generator.ts  # 图片模式 - 图片生成
+│   │   └── image-renderer.ts   # 图片模式 - PPTX 渲染
 │   ├── store/                  # Zustand 状态管理
 │   └── types/                  # TypeScript 类型定义
 ├── docs/                       # 文档
-├── public/                     # 静态资源
 ├── .sessions/                  # 会话存储（gitignored）
 ├── logs/                       # 日志文件（gitignored）
-├── docker-compose.yml          # Docker Compose 配置
-├── Dockerfile                  # Docker 构建文件
-└── ecosystem.config.js         # PM2 配置
+└── docker-compose.yml          # Docker 配置
 ```
 
 ## 可用脚本
 
 ```bash
-# 开发
 npm run dev          # 启动开发服务器
 npm run build        # 构建生产版本
 npm run start        # 运行生产版本
 npm run lint         # 代码检查
-
-# PM2 生产部署
-npm run pm2:start    # 启动 PM2 进程
-npm run pm2:stop     # 停止 PM2 进程
-npm run pm2:restart  # 重启 PM2 进程
-npm run pm2:logs     # 查看实时日志
-npm run pm2:status   # 查看进程状态
+npm run pm2:start    # PM2 启动
+npm run pm2:stop     # PM2 停止
+npm run pm2:logs     # PM2 日志
 ```
 
 ## 主题配色
