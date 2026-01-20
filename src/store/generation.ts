@@ -98,3 +98,40 @@ export async function fetchSessions(ids: string[]) {
   const results = await Promise.all(ids.map((id) => fetchSession(id)))
   return results.filter((session) => session !== null)
 }
+
+// 会话摘要类型（与服务端 SessionSummary 对应）
+export interface SessionSummary {
+  id: string
+  topic: string
+  language: 'zh-CN' | 'en-US'
+  mode: 'dsl' | 'image'
+  theme?: string
+  stage: string
+  error?: string
+  createdAt: string
+  updatedAt: string
+  hasContent: boolean
+}
+
+// 工具函数：批量获取会话摘要（轻量级，用于列表展示）
+export async function fetchSessionSummaries(ids: string[]): Promise<SessionSummary[]> {
+  if (ids.length === 0) return []
+
+  try {
+    const response = await fetch('/api/session/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch session summaries')
+    }
+
+    const data = await response.json()
+    return data.sessions || []
+  } catch (error) {
+    console.error('Failed to fetch session summaries:', error)
+    return []
+  }
+}

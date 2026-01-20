@@ -174,6 +174,54 @@ export async function getAllSessions(): Promise<GenerationSession[]> {
 }
 
 /**
+ * 会话摘要（用于列表展示，不包含大型数据）
+ */
+export interface SessionSummary {
+  id: string
+  topic: string
+  language: 'zh-CN' | 'en-US'
+  mode: GenerationMode
+  theme?: ThemeName
+  stage: GenerationStage
+  error?: string
+  createdAt: string
+  updatedAt: string
+  // 只包含是否有内容的标记，不包含实际内容
+  hasContent: boolean
+}
+
+/**
+ * 获取会话摘要（不包含 dslPresentation 和 imagePresentation）
+ */
+export async function getSessionSummary(id: string): Promise<SessionSummary | null> {
+  const session = await getSession(id)
+  if (!session) return null
+
+  return {
+    id: session.id,
+    topic: session.topic,
+    language: session.language,
+    mode: session.mode,
+    theme: session.theme,
+    stage: session.stage,
+    error: session.error,
+    createdAt: session.createdAt,
+    updatedAt: session.updatedAt,
+    hasContent: session.mode === 'image'
+      ? !!(session.imagePresentation?.slides?.length)
+      : !!(session.dslPresentation?.slides?.length),
+  }
+}
+
+/**
+ * 批量获取会话摘要
+ */
+export async function getSessionsSummary(ids: string[]): Promise<SessionSummary[]> {
+  const summaries = await Promise.all(ids.map(id => getSessionSummary(id)))
+  return summaries.filter((s): s is SessionSummary => s !== null)
+}
+
+/**
  * 清理过期会话（超过24小时）
  */
 export async function cleanupOldSessions(): Promise<number> {

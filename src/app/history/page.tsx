@@ -15,14 +15,13 @@ import {
 } from 'lucide-react'
 import { Header } from '@/components/header'
 import { Button } from '@/components/ui/button'
-import { useGenerationStore, fetchSessions } from '@/store/generation'
-import { GenerationSession } from '@/types'
+import { useGenerationStore, fetchSessionSummaries, SessionSummary } from '@/store/generation'
 
 export default function HistoryPage() {
   const router = useRouter()
   const { sessionIds, loadSessionIds, removeSessionId } = useGenerationStore()
 
-  const [sessions, setSessions] = useState<GenerationSession[]>([])
+  const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [loading, setLoading] = useState(true)
 
   // 加载会话ID列表
@@ -30,7 +29,7 @@ export default function HistoryPage() {
     loadSessionIds()
   }, [loadSessionIds])
 
-  // 当sessionIds变化时，获取会话数据
+  // 当sessionIds变化时，获取会话摘要
   useEffect(() => {
     const loadSessions = async () => {
       if (sessionIds.length === 0) {
@@ -40,7 +39,7 @@ export default function HistoryPage() {
       }
 
       setLoading(true)
-      const fetchedSessions = await fetchSessions(sessionIds)
+      const fetchedSessions = await fetchSessionSummaries(sessionIds)
       // 按创建时间排序（最新的在前）
       fetchedSessions.sort(
         (a, b) =>
@@ -65,7 +64,7 @@ export default function HistoryPage() {
 
   const handleRefresh = async () => {
     setLoading(true)
-    const fetchedSessions = await fetchSessions(sessionIds)
+    const fetchedSessions = await fetchSessionSummaries(sessionIds)
     fetchedSessions.sort(
       (a, b) =>
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -173,10 +172,8 @@ export default function HistoryPage() {
               const isZh = session.language === 'zh-CN'
               const isCompleted = session.stage === 'completed'
               const isImageMode = session.mode === 'image'
-              // 根据模式判断是否可下载
-              const canDownload = isImageMode
-                ? !!session.imagePresentation?.slides?.length
-                : !!session.dslPresentation?.slides?.length
+              // 使用 hasContent 判断是否可下载
+              const canDownload = session.hasContent
 
               return (
                 <div
